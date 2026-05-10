@@ -1,0 +1,44 @@
+name: Feature Request
+description: Proposer une amélioration ou une nouvelle fonctionnalité
+title: "[REQ] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de proposer une amélioration ! Décrivez la fonctionnalité souhaitée.
+
+  - type: checkboxes
+    id: existing_requests
+    attributes:
+      label: Vérifications préalables
+      options:
+        - label: J'ai vérifié que cette demande n'existe pas déjà dans les issues ouvertes
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problème lié à cette demande
+      description: Est-ce que cette fonctionnalité résout un problème ? Si oui, décrivez-le.
+      placeholder: "Je rencontre une frustration quand..."
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solution souhaitée
+      description: Décrivez clairement la fonctionnalité que vous aimeriez voir ajoutée
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives envisagées
+      description: Avez-vous considéré d'autres approches ?
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Contexte supplémentaire
+      description: Toute autre information utile

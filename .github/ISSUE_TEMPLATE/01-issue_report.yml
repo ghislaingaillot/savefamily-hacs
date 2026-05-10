@@ -1,0 +1,79 @@
+name: Bug Report
+description: Signaler un problème avec l'intégration SaveFamily
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de remplir ce formulaire pour nous aider à résoudre le problème.
+        Avant de soumettre, vérifiez que le problème n'a pas déjà été signalé dans les [issues existantes](https://github.com/ghislaingaillot/savefamily-hacs/issues).
+
+  - type: input
+    id: ha_version
+    attributes:
+      label: Version de Home Assistant
+      placeholder: "ex: 2024.12.0"
+    validations:
+      required: true
+
+  - type: input
+    id: integration_version
+    attributes:
+      label: Version de l'intégration SaveFamily
+      placeholder: "ex: 0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Méthode d'installation
+      options:
+        - HACS
+        - Manuel
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: existing_issues
+    attributes:
+      label: Vérifications préalables
+      options:
+        - label: J'ai vérifié que ce problème n'existe pas déjà dans les issues ouvertes
+          required: true
+        - label: J'ai activé les logs de debug et inclus les logs pertinents ci-dessous
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description du problème
+      description: Décrivez clairement le problème rencontré
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        **Pour activer les logs de debug**, ajouter dans `configuration.yaml` :
+        ```yaml
+        logger:
+          default: warning
+          logs:
+            custom_components.savefamily: debug
+        ```
+        Redémarrer Home Assistant, reproduire le problème, puis copier les logs depuis **Paramètres → Système → Journaux**.
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Coller les logs de debug ici
+      render: text
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Contexte supplémentaire
+      description: Toute autre information utile (modèle de montre, région configurée, etc.)
