@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
 from homeassistant import config_entries
@@ -17,6 +17,9 @@ from homeassistant.helpers.selector import (
 from .const import CONF_APP_ID, CONF_LOGINNAME, CONF_PASSWORD, CONF_REGION, DOMAIN, TITLE
 from .core.async_client import SaveFamilyApiClient
 from .core.protocol import DEFAULT_APP_ID, DEFAULT_REGION, REGIONS, SaveFamilyAuthError, SaveFamilyError
+
+if TYPE_CHECKING:
+    from homeassistant.data_entry_flow import FlowResult
 
 
 def _user_schema(user_input: dict[str, Any] | None = None) -> vol.Schema:
@@ -56,9 +59,9 @@ class SaveFamilyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     def __init__(self) -> None:
-        self._reauth_entry = None
+        self._reauth_entry: config_entries.ConfigEntry | None = None
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None):
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
             unique_id = f"{user_input[CONF_REGION]}:{user_input[CONF_LOGINNAME]}"
@@ -90,11 +93,11 @@ class SaveFamilyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_reauth(self, entry_data: dict[str, Any]):
+    async def async_step_reauth(self, entry_data: dict[str, Any]) -> FlowResult:
         self._reauth_entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
         return await self.async_step_reauth_confirm()
 
-    async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None):
+    async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}
         if self._reauth_entry is None:
             return self.async_abort(reason="reauth_unsuccessful")

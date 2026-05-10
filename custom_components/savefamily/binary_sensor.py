@@ -1,21 +1,21 @@
 from __future__ import annotations
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, LOCATION_STALE_AFTER, ONLINE_THRESHOLD
+from . import SaveFamilyConfigEntry
+from .const import LOCATION_STALE_AFTER, ONLINE_THRESHOLD
 from .entity import SaveFamilyEntity
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: SaveFamilyConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    coordinator = entry.runtime_data.coordinator
     entities = []
     for did in coordinator.data:
         entities.append(SaveFamilyLocationStaleSensor(coordinator, did))

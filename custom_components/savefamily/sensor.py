@@ -1,21 +1,20 @@
 from __future__ import annotations
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from . import SaveFamilyConfigEntry
 from .entity import SaveFamilyEntity
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: SaveFamilyConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    coordinator = entry.runtime_data.coordinator
     entities = []
     for did in coordinator.data:
         entities.append(SaveFamilyBatterySensor(coordinator, did))
@@ -55,7 +54,7 @@ class SaveFamilyLastFixSensor(SaveFamilyEntity, SensorEntity):
 class SaveFamilyStepsSensor(SaveFamilyEntity, SensorEntity):
     _attr_translation_key = "steps"
     _attr_icon = "mdi:walk"
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "steps"
 
     def __init__(self, coordinator, did: str) -> None:

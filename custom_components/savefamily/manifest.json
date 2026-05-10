@@ -1,8 +1,11 @@
 {
   "domain": "savefamily",
   "name": "SaveFamily",
+  "codeowners": ["@ghislaingaillot"],
   "config_flow": true,
+  "documentation": "https://github.com/ghislaingaillot/savefamily-hacs",
+  "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "version": "0.1.0",
-  "requirements": ["aiohttp>=3.9.0"]
+  "issue_tracker": "https://github.com/ghislaingaillot/savefamily-hacs/issues",
+  "version": "0.1.0"
 }
