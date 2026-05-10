@@ -1,0 +1,67 @@
+{
+  "title": "SaveFamily",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect SaveFamily",
+        "description": "Enter your SaveFamily account credentials.",
+        "data": {
+          "region": "Region",
+          "loginname": "Account (email or phone)",
+          "password": "Password",
+          "app_id": "App ID (advanced)"
+        },
+        "data_description": {
+          "app_id": "Application identifier. Leave the default value unless you know what you are doing."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect SaveFamily",
+        "description": "Update the password for this SaveFamily account.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid authentication",
+      "cannot_connect": "Failed to connect to server"
+    },
+    "abort": {
+      "already_configured": "This SaveFamily account is already configured.",
+      "reauth_successful": "Re-authentication successful",
+      "reauth_unsuccessful": "Re-authentication could not be started"
+    }
+  },
+  "entity": {
+    "device_tracker": {
+      "location": {
+        "name": "Location"
+      }
+    },
+    "sensor": {
+      "battery": {
+        "name": "Battery"
+      },
+      "last_fix": {
+        "name": "Last fix"
+      },
+      "steps": {
+        "name": "Steps"
+      }
+    },
+    "binary_sensor": {
+      "location_stale": {
+        "name": "Location stale"
+      },
+      "online": {
+        "name": "Online"
+      }
+    },
+    "button": {
+      "request_location": {
+        "name": "Refresh location"
+      }
+    }
+  }
+}

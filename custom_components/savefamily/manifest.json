@@ -1,0 +1,8 @@
+{
+  "domain": "savefamily",
+  "name": "SaveFamily",
+  "config_flow": true,
+  "iot_class": "cloud_polling",
+  "version": "0.1.0",
+  "requirements": ["aiohttp>=3.9.0"]
+}

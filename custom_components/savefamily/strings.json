@@ -1,0 +1,67 @@
+{
+  "title": "SaveFamily",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connecter SaveFamily",
+        "description": "Entrez les informations de votre compte SaveFamily.",
+        "data": {
+          "region": "Région",
+          "loginname": "Compte (email ou téléphone)",
+          "password": "Mot de passe",
+          "app_id": "App ID (avancé)"
+        },
+        "data_description": {
+          "app_id": "Identifiant d'application. Laisser la valeur par défaut sauf si vous savez ce que vous faites."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnexion SaveFamily",
+        "description": "Mettez à jour le mot de passe de ce compte SaveFamily.",
+        "data": {
+          "password": "Mot de passe"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Authentification invalide",
+      "cannot_connect": "Impossible de se connecter au serveur"
+    },
+    "abort": {
+      "already_configured": "Ce compte SaveFamily est déjà configuré.",
+      "reauth_successful": "Ré-authentification réussie",
+      "reauth_unsuccessful": "Impossible de démarrer la ré-authentification"
+    }
+  },
+  "entity": {
+    "device_tracker": {
+      "location": {
+        "name": "Localisation"
+      }
+    },
+    "sensor": {
+      "battery": {
+        "name": "Batterie"
+      },
+      "last_fix": {
+        "name": "Dernière position"
+      },
+      "steps": {
+        "name": "Pas"
+      }
+    },
+    "binary_sensor": {
+      "location_stale": {
+        "name": "Position obsolète"
+      },
+      "online": {
+        "name": "En ligne"
+      }
+    },
+    "button": {
+      "request_location": {
+        "name": "Rafraîchir la position"
+      }
+    }
+  }
+}
