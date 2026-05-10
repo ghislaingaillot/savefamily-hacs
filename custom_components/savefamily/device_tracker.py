@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from homeassistant.components.device_tracker import SourceType, TrackerEntity
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import SaveFamilyConfigEntry
@@ -14,7 +14,21 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data.coordinator
-    async_add_entities(SaveFamilyTrackerEntity(coordinator, did) for did in coordinator.data)
+    known_dids: set[str] = set()
+
+    @callback
+    def _async_add_new_devices() -> None:
+        new_entities = [
+            SaveFamilyTrackerEntity(coordinator, did)
+            for did in coordinator.data
+            if did not in known_dids
+        ]
+        if new_entities:
+            known_dids.update(e._did for e in new_entities)
+            async_add_entities(new_entities)
+
+    entry.async_on_unload(coordinator.async_add_listener(_async_add_new_devices))
+    _async_add_new_devices()
 
 
 class SaveFamilyTrackerEntity(SaveFamilyEntity, TrackerEntity):

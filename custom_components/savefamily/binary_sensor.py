@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
@@ -16,11 +16,23 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data.coordinator
-    entities = []
-    for did in coordinator.data:
-        entities.append(SaveFamilyLocationStaleSensor(coordinator, did))
-        entities.append(SaveFamilyOnlineSensor(coordinator, did))
-    async_add_entities(entities)
+    known_dids: set[str] = set()
+
+    @callback
+    def _async_add_new_devices() -> None:
+        new_entities = []
+        for did in coordinator.data:
+            if did not in known_dids:
+                known_dids.add(did)
+                new_entities.extend([
+                    SaveFamilyLocationStaleSensor(coordinator, did),
+                    SaveFamilyOnlineSensor(coordinator, did),
+                ])
+        if new_entities:
+            async_add_entities(new_entities)
+
+    entry.async_on_unload(coordinator.async_add_listener(_async_add_new_devices))
+    _async_add_new_devices()
 
 
 class SaveFamilyLocationStaleSensor(SaveFamilyEntity, BinarySensorEntity):
