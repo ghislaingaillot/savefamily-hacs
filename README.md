@@ -7,6 +7,150 @@
 
 # SaveFamily — Home Assistant Integration
 
+*[Français ci-dessous](#savefamily--intégration-home-assistant)*
+
+Unofficial Home Assistant integration for **SaveFamily** GPS smartwatches for kids.
+
+This integration exposes the GPS position, battery level, step counter and connection status of each watch in Home Assistant.
+
+> **Technical note:** SaveFamily runs on the shared 3G Electronics backend (`myaqsh.com`), the same platform used by YQT Smart, SeTracker and CarePro+. This integration is inspired by the open-source project [yqt-smart-api](https://github.com/Niek/yqt-smart-api).
+
+---
+
+## Installation
+
+### Via HACS (recommended)
+
+1. Open HACS in Home Assistant
+2. Go to **Integrations** → ⋮ → **Custom repositories**
+3. Add the URL: `https://github.com/ghislaingaillot/savefamily-hacs`
+4. Category: **Integration**
+5. Search for **SaveFamily** and click **Download**
+6. Restart Home Assistant
+
+### Manual installation
+
+1. Download the [latest release](https://github.com/ghislaingaillot/savefamily-hacs/releases/latest)
+2. Copy the `custom_components/savefamily/` folder into your `config/custom_components/` directory
+3. Restart Home Assistant
+
+---
+
+## Configuration
+
+1. Go to **Settings** → **Devices & Services** → **Add Integration**
+2. Search for **SaveFamily**
+3. Fill in the form:
+
+| Field | Description |
+|-------|-------------|
+| **Region** | Geographic server. Use `europe` for France/Spain |
+| **Login** | Email or phone number of your SaveFamily account |
+| **Password** | Your SaveFamily account password |
+| **App ID** *(advanced)* | Application identifier — leave the default value |
+
+> **Connection issue?** If you get an "account not registered" error, the App ID for your version of SaveFamily may differ. See the [Troubleshooting](#troubleshooting) section.
+
+---
+
+## Available entities
+
+The integration creates the following entities for **each watch** linked to the account:
+
+### Device Tracker
+
+| Entity | Description |
+|--------|-------------|
+| `device_tracker.<name>_localisation` | Real-time GPS position on the Home Assistant map |
+
+Extra attributes: `address`, `speed_kmh`, `direction_degrees`, `accuracy_m`, `position_timestamp`
+
+### Sensors
+
+| Entity | Unit | Description |
+|--------|------|-------------|
+| `sensor.<name>_batterie` | % | Watch battery level |
+| `sensor.<name>_derniere_position` | timestamp | Timestamp of the last GPS update |
+| `sensor.<name>_pas` | steps | Daily step count *(model-dependent)* |
+
+### Binary Sensors
+
+| Entity | Class | Description |
+|--------|-------|-------------|
+| `binary_sensor.<name>_en_ligne` | connectivity | `ON` if the watch reported data in the last 15 minutes |
+| `binary_sensor.<name>_position_obsolete` | problem | `ON` if the last position is older than 30 minutes |
+
+### Buttons
+
+| Entity | Description |
+|--------|-------------|
+| `button.<name>_rafraichir_la_position` | Sends a GPS poll command to the watch to force an immediate update |
+
+---
+
+## Data refresh
+
+The integration polls the API every **5 minutes**. The refresh button sends an asynchronous command to the watch, then triggers a new poll 20 seconds later.
+
+---
+
+## Troubleshooting
+
+### Authentication error — "account not registered"
+
+The default **App ID** (`aaagg11145`) is used by most apps built on the 3G Electronics platform. If it does not work with your version of the SaveFamily app, you will need to find the correct value by intercepting the app's network traffic:
+
+1. Install [mitmproxy](https://mitmproxy.org/) on your computer
+2. Configure your phone to use the proxy
+3. Log in to the SaveFamily app
+4. Capture the POST request to `/app/public/S10APP/v2_new_userLogin2`
+5. Retrieve the value of the `appid` parameter
+6. Edit the integration in Home Assistant → **Reconfigure** → enter the value in the "App ID" field
+
+### Enable debug logs
+
+Add to `configuration.yaml`:
+
+```yaml
+logger:
+  default: warning
+  logs:
+    custom_components.savefamily: debug
+```
+
+---
+
+## Contributing
+
+Contributions are welcome! To suggest an improvement or report a bug:
+
+1. Open an [issue](https://github.com/ghislaingaillot/savefamily-hacs/issues) using the appropriate template
+2. Or submit a Pull Request
+
+---
+
+## Credits
+
+- [Niek](https://github.com/Niek) for the [yqt-smart-api](https://github.com/Niek/yqt-smart-api) project and the reverse engineering documentation of the 3G Electronics / myaqsh.com platform
+- [SaveFamily](https://savefamily.es) for the connected watches
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
+---
+
+## Disclaimer
+
+This is an unofficial project, not affiliated with SaveFamily. It is provided "as is", without warranty of any kind. Use at your own risk.
+
+---
+---
+
+# SaveFamily — Intégration Home Assistant
+
 Intégration Home Assistant non officielle pour les montres connectées **SaveFamily** (montres GPS pour enfants).
 
 Cette intégration expose la position GPS, le niveau de batterie, le compteur de pas et le statut de connexion de chaque montre dans Home Assistant.
