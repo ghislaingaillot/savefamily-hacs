@@ -76,4 +76,6 @@ class SaveFamilyTrackerEntity(SaveFamilyEntity, TrackerEntity):
             attrs["poll_status"] = self.snapshot.last_poll_status
         if self.snapshot.last_poll_message:
             attrs["poll_message"] = self.snapshot.last_poll_message
+        if self.snapshot.raw_position:
+            attrs["debug_raw_position"] = self.snapshot.raw_position
         return attrs
