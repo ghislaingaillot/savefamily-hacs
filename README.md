@@ -88,6 +88,16 @@ Extra attributes: `address`, `speed_kmh`, `direction_degrees`, `accuracy_m`, `po
 
 ---
 
+## Dashboard example
+
+Here is an example card for a Lovelace dashboard:
+
+![Dashboard card example](docs/images/dashboard-card.png)
+
+The card shows the battery level, the time since the last GPS update, and the current location zone — along with the child's profile picture.
+
+---
+
 ## Data refresh
 
 The integration polls the API every **5 minutes**. The refresh button sends an asynchronous command to the watch, then triggers a new poll 20 seconds later.
@@ -227,6 +237,16 @@ Attributs supplémentaires : `address`, `speed_kmh`, `direction_degrees`, `accur
 | Entité | Description |
 |--------|-------------|
 | `button.<nom>_rafraichir_la_position` | Envoie une commande GPS à la montre pour forcer une mise à jour immédiate |
+
+---
+
+## Exemple de carte dashboard
+
+Voici un exemple de carte pour un tableau de bord Lovelace :
+
+![Exemple de carte dashboard](docs/images/dashboard-card.png)
+
+La carte affiche le niveau de batterie, le temps écoulé depuis la dernière position GPS et la zone de localisation actuelle — ainsi que la photo de profil de l'enfant.
 
 ---
 
