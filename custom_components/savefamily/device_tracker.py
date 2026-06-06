@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from homeassistant.components.device_tracker import SourceType, TrackerEntity
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import SaveFamilyConfigEntry
@@ -27,14 +26,6 @@ async def async_setup_entry(
                 new_entities.append(entity)
         if new_entities:
             async_add_entities(new_entities)
-
-        stale_dids = set(entities_by_did) - set(coordinator.data)
-        if stale_dids:
-            entity_reg = er.async_get(hass)
-            for did in stale_dids:
-                entity = entities_by_did.pop(did)
-                if entity.entity_id:
-                    entity_reg.async_remove(entity.entity_id)
 
     entry.async_on_unload(coordinator.async_add_listener(_async_handle_update))
     _async_handle_update()
