@@ -3,6 +3,7 @@ from __future__ import annotations
 from homeassistant.components.button import ButtonEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import SaveFamilyConfigEntry
@@ -16,21 +17,29 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data.coordinator
-    known_dids: set[str] = set()
+    entities_by_did: dict[str, SaveFamilyRequestLocationButton] = {}
 
     @callback
-    def _async_add_new_devices() -> None:
-        new_entities = [
-            SaveFamilyRequestLocationButton(coordinator, did)
-            for did in coordinator.data
-            if did not in known_dids
-        ]
+    def _async_handle_update() -> None:
+        new_entities = []
+        for did in coordinator.data:
+            if did not in entities_by_did:
+                entity = SaveFamilyRequestLocationButton(coordinator, did)
+                entities_by_did[did] = entity
+                new_entities.append(entity)
         if new_entities:
-            known_dids.update(e._did for e in new_entities)
             async_add_entities(new_entities)
 
-    entry.async_on_unload(coordinator.async_add_listener(_async_add_new_devices))
-    _async_add_new_devices()
+        stale_dids = set(entities_by_did) - set(coordinator.data)
+        if stale_dids:
+            entity_reg = er.async_get(hass)
+            for did in stale_dids:
+                entity = entities_by_did.pop(did)
+                if entity.entity_id:
+                    entity_reg.async_remove(entity.entity_id)
+
+    entry.async_on_unload(coordinator.async_add_listener(_async_handle_update))
+    _async_handle_update()
 
 
 class SaveFamilyRequestLocationButton(SaveFamilyEntity, ButtonEntity):
