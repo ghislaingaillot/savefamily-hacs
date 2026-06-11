@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urljoin
@@ -29,6 +30,8 @@ from .protocol import (
     hash_password,
     is_login_timeout_response,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class SaveFamilyApiClient:
@@ -98,6 +101,15 @@ class SaveFamilyApiClient:
                 )
             else:
                 states[did] = build_watch_state(watch, response, previous.get(did))
+
+            state = states[did]
+            if state.step_count is None and state.raw_position:
+                _LOGGER.debug(
+                    "No step count found for %s (model=%s); raw position data: %s",
+                    did,
+                    watch.model,
+                    state.raw_position,
+                )
         return states
 
     async def async_request_location(self, did: str) -> dict[str, Any]:
