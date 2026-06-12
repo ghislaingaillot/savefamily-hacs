@@ -74,6 +74,7 @@ class SaveFamilyApiClient:
         watches = build_watch_index(login_payload, self.user_id)
         if self.user_id is not None:
             device_payload = await self.async_find_device_list_by_user_id()
+            _LOGGER.debug("v2_findDeviceListByUserId response: %s", device_payload)
             device_watches = build_watch_index(device_payload, self.user_id)
             if not watches:
                 watches = device_watches
