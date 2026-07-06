@@ -341,4 +341,10 @@ class SaveFamilyApiClient:
         message = str(payload.get("message", "unknown login failure"))
         if status == 2:
             raise SaveFamilyAuthError(message)
+        if status == 3:
+            raise SaveFamilyResponseError(
+                status,
+                f"API version rejected by server (update the integration): {message}",
+                payload,
+            )
         raise SaveFamilyResponseError(status, message, payload)
