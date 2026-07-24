@@ -25,7 +25,8 @@
     },
     "error": {
       "invalid_auth": "Invalid authentication",
-      "cannot_connect": "Failed to connect to server"
+      "cannot_connect": "Failed to connect to server",
+      "upgrade_required": "The SaveFamily server now blocks this client (\"please upgrade the app\"). The public API endpoint has been closed and the new API requires a client certificate that only exists inside the official app. No re-login can bypass this block. See docs/SERVER_LOCKOUT.md."
     },
     "abort": {
       "already_configured": "This SaveFamily account is already configured.",

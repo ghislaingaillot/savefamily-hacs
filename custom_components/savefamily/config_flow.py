@@ -16,7 +16,14 @@ from homeassistant.helpers.selector import (
 
 from .const import CONF_APP_ID, CONF_LOGINNAME, CONF_PASSWORD, CONF_REGION, DOMAIN, TITLE
 from .core.async_client import SaveFamilyApiClient
-from .core.protocol import DEFAULT_APP_ID, DEFAULT_REGION, REGIONS, SaveFamilyAuthError, SaveFamilyError
+from .core.protocol import (
+    DEFAULT_APP_ID,
+    DEFAULT_REGION,
+    REGIONS,
+    SaveFamilyAuthError,
+    SaveFamilyError,
+    SaveFamilyUpgradeRequiredError,
+)
 
 if TYPE_CHECKING:
     from homeassistant.data_entry_flow import FlowResult
@@ -77,6 +84,8 @@ class SaveFamilyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             try:
                 await client.async_login()
+            except SaveFamilyUpgradeRequiredError:
+                errors["base"] = "upgrade_required"
             except SaveFamilyAuthError:
                 errors["base"] = "invalid_auth"
             except SaveFamilyError:
@@ -116,6 +125,8 @@ class SaveFamilyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             try:
                 await client.async_login()
+            except SaveFamilyUpgradeRequiredError:
+                errors["base"] = "upgrade_required"
             except SaveFamilyAuthError:
                 errors["base"] = "invalid_auth"
             except SaveFamilyError:

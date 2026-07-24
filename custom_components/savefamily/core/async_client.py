@@ -21,6 +21,7 @@ from .protocol import (
     SaveFamilyConnectionError,
     SaveFamilyError,
     SaveFamilyResponseError,
+    SaveFamilyUpgradeRequiredError,
     SaveFamilyWatch,
     SaveFamilyWatchState,
     build_watch_index,
@@ -342,9 +343,10 @@ class SaveFamilyApiClient:
         if status == 2:
             raise SaveFamilyAuthError(message)
         if status == 3:
-            raise SaveFamilyResponseError(
-                status,
-                f"API version rejected by server (update the integration): {message}",
-                payload,
+            raise SaveFamilyUpgradeRequiredError(
+                "SaveFamily server refused the login with a 'please upgrade the app' "
+                "block (status 3). The public API endpoint is now closed to this client "
+                "and the live API sits behind a mutual-TLS wall; this cannot be fixed by "
+                f"retrying or changing the client version. Server said: {message}"
             )
         raise SaveFamilyResponseError(status, message, payload)

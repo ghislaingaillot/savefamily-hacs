@@ -3,13 +3,18 @@ from __future__ import annotations
 import logging
 
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN, POLL_INTERVAL, REQUEST_LOCATION_REFRESH_DELAY
 from .core.async_client import SaveFamilyApiClient
-from .core.protocol import SaveFamilyAuthError, SaveFamilyError, SaveFamilyWatchState
+from .core.protocol import (
+    SaveFamilyAuthError,
+    SaveFamilyError,
+    SaveFamilyUpgradeRequiredError,
+    SaveFamilyWatchState,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,6 +33,8 @@ class SaveFamilyDataUpdateCoordinator(DataUpdateCoordinator[dict[str, SaveFamily
     async def _async_update_data(self) -> dict[str, SaveFamilyWatchState]:
         try:
             return await self.client.async_refresh_watch_states(self.data)
+        except SaveFamilyUpgradeRequiredError as exc:
+            raise ConfigEntryError(str(exc)) from exc
         except SaveFamilyAuthError as exc:
             raise ConfigEntryAuthFailed(str(exc)) from exc
         except SaveFamilyError as exc:
@@ -36,6 +43,8 @@ class SaveFamilyDataUpdateCoordinator(DataUpdateCoordinator[dict[str, SaveFamily
     async def async_request_location(self, did: str) -> None:
         try:
             await self.client.async_request_location(did)
+        except SaveFamilyUpgradeRequiredError as exc:
+            raise ConfigEntryError(str(exc)) from exc
         except SaveFamilyAuthError as exc:
             raise ConfigEntryAuthFailed(str(exc)) from exc
         except SaveFamilyError as exc:

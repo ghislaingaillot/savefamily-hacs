@@ -25,7 +25,8 @@
     },
     "error": {
       "invalid_auth": "Authentification invalide",
-      "cannot_connect": "Impossible de se connecter au serveur"
+      "cannot_connect": "Impossible de se connecter au serveur",
+      "upgrade_required": "Le serveur SaveFamily bloque désormais ce client (« veuillez mettre à jour l'application »). L'API publique a été fermée et la nouvelle API exige un certificat client présent uniquement dans l'application officielle. Aucune reconnexion ne peut contourner ce blocage. Voir docs/SERVER_LOCKOUT.md."
     },
     "abort": {
       "already_configured": "Ce compte SaveFamily est déjà configuré.",
