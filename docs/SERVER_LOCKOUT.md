@@ -72,30 +72,29 @@ the silent retry loop and tells the user exactly why.
 ## Recovery path (requires a rooted device / emulator running the official app)
 
 The only way to make the integration work again is to capture what the live app
-actually sends, then port it here.
+actually sends, then port it here. A ready-to-run Frida harness and a full runbook
+are provided in [`docs/frida/`](frida/README.md):
 
-1. Install the official **SaveFamily** app on a rooted Android device or emulator
-   and log in successfully.
-2. Attach [Frida](https://frida.re/) and dump the native credentials:
+- [`frida/capture_savefamily.js`](frida/capture_savefamily.js) — hooks the native
+  `NativeUtils.getAppId/getVersion/getFlag` getters, dumps the **mTLS client
+  certificate chain + private key** (via the Java `X509KeyManager`/`KeyStore`
+  layer, with a native `libssl` fallback), and logs the real login request.
+- [`frida/README.md`](frida/README.md) — prerequisites (rooted device/emulator,
+  `frida-server`), how to run it, how to save `client-cert.pem` / `client-key.pem`,
+  and how to wire the identity into `core/async_client.py`.
 
-   ```javascript
-   Java.perform(() => {
-     const N = Java.use('com.tgelec.aqsh.utils.NativeUtils');
-     console.log('appid   =', N.getAppId());
-     console.log('version =', N.getVersion());
-     console.log('flag    =', N.getFlag());
-   });
-   ```
+Summary of the steps:
 
-3. Capture the actual login traffic (mitmproxy / Frida SSL-pinning bypass) to learn:
-   - the **host and port** used (expected: `:11001`–`:11003`),
-   - the **endpoint** and full parameter set,
-   - the **client certificate + private key** presented in the TLS handshake.
-4. Once the client certificate/key and the new request format are known, the API
-   client (`custom_components/savefamily/core/async_client.py`) must be extended
-   to talk to the mTLS endpoint with that certificate. The current
-   `appid`/`version`/`flag` constants in `core/protocol.py` are then whatever
-   step 2 reported.
+1. On a rooted device/emulator, install the official **SaveFamily** app and run
+   `frida -U -f com.tgelec.savefamily -l docs/frida/capture_savefamily.js --no-pause`,
+   then log in so the TLS handshake and login request fire.
+2. Copy the printed `appid`/`version`/`flag` into `core/protocol.py`.
+3. Save the printed client certificate + private key to `client-cert.pem` /
+   `client-key.pem` (or pull the bundled keystore whose password the hook prints).
+4. Extend `core/async_client.py` to talk to the mTLS endpoint
+   (`:11001`–`:11003`) with that certificate (`ssl.SSLContext.load_cert_chain`),
+   update the base URLs / login endpoint to the captured request, make the cert
+   path configurable, and relax the `ConfigEntryError` block once login works.
 
 Track the upstream reference project
 [Niek/yqt-smart-api](https://github.com/Niek/yqt-smart-api/issues/7), which hit
