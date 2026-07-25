@@ -1,6 +1,18 @@
 # SaveFamily server lockout (status 3 — "The current app is unavailable. Please upgrade the app.")
 
-## Symptom
+## Resolved in v0.4.1
+
+The upstream reference project [yqt-smart-api](https://github.com/Niek/yqt-smart-api)
+worked out the new protocol (commit
+[`5ee1a46`](https://github.com/Niek/yqt-smart-api/commit/5ee1a46)): the live API moved
+to mutual-TLS endpoints (`:11001`–`:11003`) with an AES-CBC encrypted JSON envelope
+wrapping the usual signed form parameters. This integration now ships the matching
+client certificate (`core/client.pem`) and the encrypt/decrypt transport
+(`core/transport.py`), ported directly from that fix. No `appid`/`version`/`flag`
+extraction from the APK was needed in the end — see the rest of this document for
+historical context on the investigation.
+
+## Symptom (v0.3.x and earlier)
 
 Home Assistant fails to set up the integration and retries endlessly with:
 

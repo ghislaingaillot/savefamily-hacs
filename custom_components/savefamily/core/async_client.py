@@ -31,6 +31,12 @@ from .protocol import (
     hash_password,
     is_login_timeout_response,
 )
+from .transport import (
+    ENCRYPT_INDEX_HEADER,
+    create_ssl_context,
+    decrypt_response,
+    encrypt_request,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -58,6 +64,7 @@ class SaveFamilyApiClient:
         self.app_id = app_id
         self.language = language
         self.request_timeout = request_timeout
+        self.ssl_context = create_ssl_context()
 
         self.session_id: str | None = None
         self.user_id: int | None = None
@@ -288,15 +295,33 @@ class SaveFamilyApiClient:
         data: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         url = urljoin(f"{self.region.base_url}/", path.lstrip("/"))
+        request_params = None
+        request_data = None
+        encrypted, index = encrypt_request(
+            params if params is not None else data or {},
+            form_encoded=data is not None,
+        )
+        if params is not None:
+            request_params = {
+                "encryptData": encrypted["encryptData"],
+                "encryptIndex": encrypted["encryptIndex"],
+            }
+        else:
+            request_data = json.dumps(encrypted, separators=(",", ":"))
 
         try:
             async with self.session.request(
                 method,
                 url,
-                params=params,
-                data=data,
-                headers={"Accept": "application/json"},
+                params=request_params,
+                data=request_data,
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json; charset=utf-8",
+                    ENCRYPT_INDEX_HEADER: str(index),
+                },
                 timeout=aiohttp.ClientTimeout(total=self.request_timeout),
+                ssl=self.ssl_context,
             ) as response:
                 raw = await response.text()
         except (aiohttp.ClientError, TimeoutError) as exc:
@@ -314,7 +339,7 @@ class SaveFamilyApiClient:
 
         if not isinstance(payload, dict):
             raise SaveFamilyResponseError(None, "server returned a non-object JSON payload", {"payload": payload})
-        return payload
+        return decrypt_response(payload)
 
     @staticmethod
     def _ensure_status(payload: dict[str, Any], allowed_statuses: set[int]) -> None:
