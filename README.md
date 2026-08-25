@@ -21,12 +21,21 @@ This integration exposes the GPS position, battery level, step counter and conne
 
 ### Via HACS (recommended)
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=ghislaingaillot&repository=savefamily-hacs&category=integration)
+
+Click the button above, then **Download** in HACS, then restart Home Assistant.
+
+<details>
+<summary>Manual steps (if the button doesn't work)</summary>
+
 1. Open HACS in Home Assistant
 2. Go to **Integrations** → ⋮ → **Custom repositories**
 3. Add the URL: `https://github.com/ghislaingaillot/savefamily-hacs`
 4. Category: **Integration**
 5. Search for **SaveFamily** and click **Download**
 6. Restart Home Assistant
+
+</details>
 
 ### Manual installation
 
@@ -173,12 +182,21 @@ Cette intégration expose la position GPS, le niveau de batterie, le compteur de
 
 ### Via HACS (recommandé)
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=ghislaingaillot&repository=savefamily-hacs&category=integration)
+
+Cliquez sur le bouton ci-dessus, puis sur **Télécharger** dans HACS, puis redémarrez Home Assistant.
+
+<details>
+<summary>Étapes manuelles (si le bouton ne fonctionne pas)</summary>
+
 1. Ouvrir HACS dans Home Assistant
 2. Aller dans **Intégrations** → ⋮ → **Dépôts personnalisés**
 3. Ajouter l'URL : `https://github.com/ghislaingaillot/savefamily-hacs`
 4. Catégorie : **Integration**
 5. Rechercher **SaveFamily** et cliquer sur **Télécharger**
 6. Redémarrer Home Assistant
+
+</details>
 
 ### Installation manuelle
 
