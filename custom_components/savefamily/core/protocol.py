@@ -351,10 +351,41 @@ def build_watch_state(
     if battery is None:
         battery = coerce_int(response.get("battery"))
 
+    latitude = coerce_float(first_row.get("lat"))
+    longitude = coerce_float(first_row.get("lng"))
+
+    if abs(coerce_int(first_row.get("datatype")) or 0) == 3:
+        # datatype 3 = Wi-Fi fix; the raw lat/lng can be off, but the server
+        # also supplies a corrected pair in lat_co/lng_co.
+        corrected_latitude = coerce_float(first_row.get("lat_co"))
+        corrected_longitude = coerce_float(first_row.get("lng_co"))
+        if (
+            corrected_latitude is not None
+            and corrected_longitude is not None
+            and (corrected_latitude != 0 or corrected_longitude != 0)
+        ):
+            latitude = corrected_latitude
+            longitude = corrected_longitude
+
+    if latitude == 0 and longitude == 0:
+        # Some watch models report (0, 0) as a "no fix" sentinel instead of
+        # omitting the position; treat it like missing position data rather
+        # than publishing a bogus location in the Gulf of Guinea.
+        if previous is not None:
+            return replace(
+                previous,
+                watch=watch,
+                raw_response=response,
+                last_poll_status=status,
+                last_poll_message=message,
+            )
+        first_row = {}
+        latitude = longitude = None
+
     return SaveFamilyWatchState(
         watch=watch,
-        latitude=coerce_float(first_row.get("lat")),
-        longitude=coerce_float(first_row.get("lng")),
+        latitude=latitude,
+        longitude=longitude,
         battery=battery,
         step_count=extract_step_count(first_row),
         last_fix=parse_position_datetime(first_row.get("positiondate")),
