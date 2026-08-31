@@ -17,6 +17,8 @@ from .protocol import (
     DEFAULT_IS_IPHONE,
     DEFAULT_LANGUAGE,
     DEFAULT_SIGN_FLAG,
+    DEVICE_OFFLINE_MESSAGE,
+    DEVICE_OFFLINE_STATUS,
     REGIONS,
     SUCCESS_STATUSES,
     SaveFamilyAuthError,
@@ -363,8 +365,10 @@ class SaveFamilyApiClient:
         status = coerce_int(payload.get("status"))
         if status in SUCCESS_STATUSES:
             return
-        message = str(payload.get("message", payload.get("msg", "unexpected command response")))
-        raise SaveFamilyResponseError(code if code is not None else status, message, payload)
+        error_status = code if code is not None else status
+        fallback = DEVICE_OFFLINE_MESSAGE if error_status == DEVICE_OFFLINE_STATUS else "unexpected command response"
+        message = str(payload.get("message", payload.get("msg", fallback)))
+        raise SaveFamilyResponseError(error_status, message, payload)
 
     @staticmethod
     def _ensure_login_success(payload: dict[str, Any]) -> None:

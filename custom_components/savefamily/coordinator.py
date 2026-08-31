@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from homeassistant.components import persistent_notification
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError
 from homeassistant.helpers.event import async_call_later
@@ -10,8 +11,10 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .const import DOMAIN, POLL_INTERVAL, REQUEST_LOCATION_REFRESH_DELAY
 from .core.async_client import SaveFamilyApiClient
 from .core.protocol import (
+    DEVICE_OFFLINE_STATUS,
     SaveFamilyAuthError,
     SaveFamilyError,
+    SaveFamilyResponseError,
     SaveFamilyUpgradeRequiredError,
     SaveFamilyWatchState,
 )
@@ -47,9 +50,20 @@ class SaveFamilyDataUpdateCoordinator(DataUpdateCoordinator[dict[str, SaveFamily
             raise ConfigEntryError(str(exc)) from exc
         except SaveFamilyAuthError as exc:
             raise ConfigEntryAuthFailed(str(exc)) from exc
+        except SaveFamilyResponseError as exc:
+            if exc.status == DEVICE_OFFLINE_STATUS:
+                persistent_notification.async_create(
+                    self.hass,
+                    exc.message,
+                    f"{self.data[did].watch.name} is offline",
+                    f"{DOMAIN}_{did}_offline",
+                )
+                return
+            raise UpdateFailed(str(exc)) from exc
         except SaveFamilyError as exc:
             raise UpdateFailed(str(exc)) from exc
 
+        persistent_notification.async_dismiss(self.hass, f"{DOMAIN}_{did}_offline")
         self._async_schedule_delayed_refresh()
 
     @callback
