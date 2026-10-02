@@ -58,42 +58,42 @@ Click the button above, then **Download** in HACS, then restart Home Assistant.
 | **Password** | Your SaveFamily account password |
 | **App ID** *(advanced)* | Application identifier — leave the default value |
 
-> **Connection issue?** If you get an "account not registered" error, the App ID for your version of SaveFamily may differ. See the [Troubleshooting](#troubleshooting) section.
+> **Connection issue?** If you get an "Invalid authentication" error, see the [Troubleshooting](#troubleshooting) section.
 
 ---
 
 ## Available entities
 
-The integration creates the following entities for **each watch** linked to the account:
+The integration creates the following entities for **each watch** linked to the account. Entity IDs are derived from the entity names in Home Assistant's language; the examples below are for an English installation (a French one gives `_localisation`, `_batterie`, etc.).
 
 ### Device Tracker
 
 | Entity | Description |
 |--------|-------------|
-| `device_tracker.<name>_localisation` | Real-time GPS position on the Home Assistant map |
+| `device_tracker.<name>_location` | Real-time GPS position on the Home Assistant map |
 
-Extra attributes: `address`, `speed_kmh`, `direction_degrees`, `accuracy_m`, `position_timestamp`
+Extra attributes: `did`, `did_id`, `model`, `address`, `speed_kmh`, `direction_degrees`, `accuracy_m`, `position_timestamp`, `poll_status`, `poll_message`
 
 ### Sensors
 
 | Entity | Unit | Description |
 |--------|------|-------------|
-| `sensor.<name>_batterie` | % | Watch battery level |
-| `sensor.<name>_derniere_position` | timestamp | Timestamp of the last GPS update |
-| `sensor.<name>_pas` | steps | Daily step count *(model-dependent)* |
+| `sensor.<name>_battery` | % | Watch battery level |
+| `sensor.<name>_last_fix` | timestamp | Timestamp of the last GPS update |
+| `sensor.<name>_steps` | steps | Daily step count *(model-dependent)* |
 
 ### Binary Sensors
 
 | Entity | Class | Description |
 |--------|-------|-------------|
-| `binary_sensor.<name>_en_ligne` | connectivity | `ON` if the watch reported data in the last 15 minutes |
-| `binary_sensor.<name>_position_obsolete` | problem | `ON` if the last position is older than 30 minutes |
+| `binary_sensor.<name>_online` | connectivity | `ON` if the last position is less than 15 minutes old |
+| `binary_sensor.<name>_location_stale` | problem | `ON` if the last position is older than 30 minutes |
 
 ### Buttons
 
 | Entity | Description |
 |--------|-------------|
-| `button.<name>_rafraichir_la_position` | Sends a GPS poll command to the watch to force an immediate update |
+| `button.<name>_refresh_location` | Sends a GPS poll command to the watch to force an immediate update |
 
 ---
 
@@ -115,16 +115,18 @@ The integration polls the API every **5 minutes**. The refresh button sends an a
 
 ## Troubleshooting
 
-### Authentication error — "account not registered"
+### Authentication error — "Invalid authentication"
 
-The default **App ID** (`aaagg11145`) is used by most apps built on the 3G Electronics platform. If it does not work with your version of the SaveFamily app, you will need to find the correct value by intercepting the app's network traffic:
+The server rejected the login (`Either account is not registered, Area selected below is incorrect or your entry may contain spaces.` in the Home Assistant logs). Check, in this order:
 
-1. Install [mitmproxy](https://mitmproxy.org/) on your computer
-2. Configure your phone to use the proxy
-3. Log in to the SaveFamily app
-4. Capture the POST request to `/app/public/S10APP/v2_new_userLogin2`
-5. Retrieve the value of the `appid` parameter
-6. Edit the integration in Home Assistant → **Reconfigure** → enter the value in the "App ID" field
+1. **Region** — an account only exists on one regional server. Log out of the SaveFamily app: the login screen shows the selected area. Choose the same region in Home Assistant.
+2. **Login** — use exactly the identifier you use in the app: if the account was created with a phone number, enter the phone number (same format), not the email.
+3. **Password** — log out and back into the app with the same password to make sure it is still valid.
+4. **App** — this integration only supports watches managed through the **SaveFamily** app on the `myaqsh.com` backend (Android package `com.tgelec.savefamily`). Watches managed by another app use a different backend and are not supported.
+
+The **App ID** field is not involved: the server returns the same response whatever its value, so keep the default (`aaagg11145`).
+
+> Intercepting the app traffic with mitmproxy no longer works since v0.4.1: the API now uses mutual TLS with encrypted payloads. It is not needed anyway.
 
 ### Enable debug logs
 
@@ -219,13 +221,13 @@ Cliquez sur le bouton ci-dessus, puis sur **Télécharger** dans HACS, puis red�
 | **Mot de passe** | Mot de passe du compte SaveFamily |
 | **App ID** *(avancé)* | Identifiant d'application — laisser la valeur par défaut |
 
-> **Problème de connexion ?** Si vous obtenez une erreur "compte non enregistré", l'App ID de votre version de SaveFamily est peut-être différent. Voir la section [Dépannage](#dépannage).
+> **Problème de connexion ?** Si vous obtenez une erreur "Authentification invalide", voir la section [Dépannage](#dépannage).
 
 ---
 
 ## Entités disponibles
 
-L'intégration crée les entités suivantes pour **chaque montre** associée au compte :
+L'intégration crée les entités suivantes pour **chaque montre** associée au compte. Les identifiants d'entités sont dérivés des noms dans la langue de Home Assistant ; les exemples ci-dessous correspondent à une installation en français.
 
 ### Device Tracker
 
@@ -233,7 +235,7 @@ L'intégration crée les entités suivantes pour **chaque montre** associée au 
 |--------|-------------|
 | `device_tracker.<nom>_localisation` | Position GPS en temps réel sur la carte Home Assistant |
 
-Attributs supplémentaires : `address`, `speed_kmh`, `direction_degrees`, `accuracy_m`, `position_timestamp`
+Attributs supplémentaires : `did`, `did_id`, `model`, `address`, `speed_kmh`, `direction_degrees`, `accuracy_m`, `position_timestamp`, `poll_status`, `poll_message`
 
 ### Capteurs (Sensors)
 
@@ -241,13 +243,13 @@ Attributs supplémentaires : `address`, `speed_kmh`, `direction_degrees`, `accur
 |--------|-------|-------------|
 | `sensor.<nom>_batterie` | % | Niveau de charge de la montre |
 | `sensor.<nom>_derniere_position` | timestamp | Horodatage de la dernière mise à jour GPS |
-| `sensor.<nom>_pas` | steps | Nombre de pas du jour |
+| `sensor.<nom>_pas` | steps | Nombre de pas du jour *(selon le modèle)* |
 
 ### Capteurs binaires (Binary Sensors)
 
 | Entité | Classe | Description |
 |--------|--------|-------------|
-| `binary_sensor.<nom>_en_ligne` | connectivity | `ON` si la montre a envoyé des données dans les 15 dernières minutes |
+| `binary_sensor.<nom>_en_ligne` | connectivity | `ON` si la dernière position date de moins de 15 minutes |
 | `binary_sensor.<nom>_position_obsolete` | problem | `ON` si la dernière position a plus de 30 minutes |
 
 ### Boutons (Buttons)
@@ -276,16 +278,18 @@ L'intégration interroge l'API toutes les **5 minutes**. Le bouton "Rafraîchir 
 
 ## Dépannage
 
-### Erreur d'authentification — "account not registered"
+### Erreur d'authentification — "Authentification invalide"
 
-La valeur par défaut de l'**App ID** (`aaagg11145`) est celle utilisée par la majorité des applications basées sur la plateforme 3G Electronics. Si elle ne fonctionne pas avec votre version de l'application, vous devrez trouver la valeur correcte en interceptant le trafic réseau de l'application mobile :
+Le serveur a refusé la connexion (`Either account is not registered, Area selected below is incorrect or your entry may contain spaces.` dans les logs de Home Assistant). Vérifier, dans l'ordre :
 
-1. Installer [mitmproxy](https://mitmproxy.org/) sur votre ordinateur
-2. Configurer votre téléphone pour utiliser le proxy
-3. Se connecter dans l'application SaveFamily
-4. Capturer la requête POST vers `/app/public/S10APP/v2_new_userLogin2`
-5. Récupérer la valeur du paramètre `appid`
-6. Modifier l'intégration dans Home Assistant → **Reconfigurer** → renseigner la valeur dans le champ "App ID"
+1. **Région** — un compte n'existe que sur un seul serveur régional. Se déconnecter de l'application SaveFamily : l'écran de connexion affiche la zone sélectionnée. Choisir la même région dans Home Assistant.
+2. **Compte** — saisir exactement l'identifiant utilisé dans l'application : si le compte a été créé avec un numéro de téléphone, saisir le numéro (même format), pas l'email.
+3. **Mot de passe** — se déconnecter puis se reconnecter dans l'application avec le même mot de passe pour vérifier qu'il est toujours valide.
+4. **Application** — cette intégration ne prend en charge que les montres gérées par l'application **SaveFamily** sur le backend `myaqsh.com` (package Android `com.tgelec.savefamily`). Les montres gérées par une autre application utilisent un autre backend et ne sont pas prises en charge.
+
+Le champ **App ID** n'est pas en cause : le serveur renvoie la même réponse quelle que soit sa valeur, garder la valeur par défaut (`aaagg11145`).
+
+> L'interception du trafic de l'application avec mitmproxy ne fonctionne plus depuis la v0.4.1 : l'API utilise désormais du TLS mutuel avec des données chiffrées. Ce n'est de toute façon plus nécessaire.
 
 ### Activer les logs de debug
 

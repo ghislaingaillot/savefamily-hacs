@@ -1,5 +1,10 @@
 # Frida capture runbook — recovering the SaveFamily mTLS client identity
 
+> **Historical — not needed since v0.4.1.** The mTLS client certificate and the
+> encrypted transport were ported from [yqt-smart-api](https://github.com/Niek/yqt-smart-api)
+> and now ship with the integration (`core/client.pem`, `core/transport.py`). This
+> runbook is kept in case the server changes its client identity again.
+
 This directory contains everything needed to run the recovery step described in
 [../SERVER_LOCKOUT.md](../SERVER_LOCKOUT.md). It **cannot** be done from a CI/dev
 machine — it requires a rooted Android device or a rooted emulator actually

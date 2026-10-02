@@ -105,11 +105,10 @@ class SaveFamilyAuthError(SaveFamilyError):
 class SaveFamilyUpgradeRequiredError(SaveFamilyError):
     """The server refuses the client with a 'please upgrade the app' block (status 3).
 
-    The LinksField/tgelec backend gates the public login endpoint on the client
-    ``version`` string and, since mid-2026, force-blocks every reverse-engineered
-    client here. The live API moved behind a mutual-TLS endpoint whose client
-    certificate only exists inside the official app, so this is not recoverable
-    by retrying or by bumping a version constant. See docs/SERVER_LOCKOUT.md.
+    The LinksField/tgelec backend gates login on the client identity. Since v0.4.1
+    the integration speaks the mutual-TLS protocol of the current app, so this
+    status means the server-side protocol changed again and the integration needs
+    an update. See docs/SERVER_LOCKOUT.md.
     """
 
 

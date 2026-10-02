@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
@@ -28,6 +29,8 @@ from .core.protocol import (
 if TYPE_CHECKING:
     from homeassistant.data_entry_flow import FlowResult
 
+_LOGGER = logging.getLogger(__name__)
+
 
 def _user_schema(user_input: dict[str, Any] | None = None) -> vol.Schema:
     user_input = user_input or {}
@@ -52,6 +55,22 @@ def _user_schema(user_input: dict[str, Any] | None = None) -> vol.Schema:
     )
 
 
+async def _async_try_login(client: SaveFamilyApiClient) -> str | None:
+    """Log in and return a config-flow error key, or None on success."""
+    try:
+        await client.async_login()
+    except SaveFamilyUpgradeRequiredError as exc:
+        _LOGGER.warning("SaveFamily login blocked by server: %s", exc)
+        return "upgrade_required"
+    except SaveFamilyAuthError as exc:
+        _LOGGER.warning("SaveFamily login rejected (region %s): %s", client.region.name, exc)
+        return "invalid_auth"
+    except SaveFamilyError as exc:
+        _LOGGER.warning("SaveFamily login failed: %s", exc)
+        return "cannot_connect"
+    return None
+
+
 def _reauth_schema() -> vol.Schema:
     return vol.Schema(
         {
@@ -71,6 +90,7 @@ class SaveFamilyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
+            user_input[CONF_LOGINNAME] = user_input[CONF_LOGINNAME].strip()
             unique_id = f"{user_input[CONF_REGION]}:{user_input[CONF_LOGINNAME]}"
             await self.async_set_unique_id(unique_id)
             self._abort_if_unique_id_configured()
@@ -82,14 +102,8 @@ class SaveFamilyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 password=user_input[CONF_PASSWORD],
                 app_id=user_input.get(CONF_APP_ID, DEFAULT_APP_ID),
             )
-            try:
-                await client.async_login()
-            except SaveFamilyUpgradeRequiredError:
-                errors["base"] = "upgrade_required"
-            except SaveFamilyAuthError:
-                errors["base"] = "invalid_auth"
-            except SaveFamilyError:
-                errors["base"] = "cannot_connect"
+            if error := await _async_try_login(client):
+                errors["base"] = error
             else:
                 return self.async_create_entry(
                     title=f"{TITLE} ({user_input[CONF_LOGINNAME]})",
@@ -123,14 +137,8 @@ class SaveFamilyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 password=data[CONF_PASSWORD],
                 app_id=data.get(CONF_APP_ID, DEFAULT_APP_ID),
             )
-            try:
-                await client.async_login()
-            except SaveFamilyUpgradeRequiredError:
-                errors["base"] = "upgrade_required"
-            except SaveFamilyAuthError:
-                errors["base"] = "invalid_auth"
-            except SaveFamilyError:
-                errors["base"] = "cannot_connect"
+            if error := await _async_try_login(client):
+                errors["base"] = error
             else:
                 self.hass.config_entries.async_update_entry(self._reauth_entry, data=data)
                 await self.hass.config_entries.async_reload(self._reauth_entry.entry_id)

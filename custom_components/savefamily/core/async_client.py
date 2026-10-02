@@ -63,7 +63,7 @@ class SaveFamilyApiClient:
 
         self.session = session
         self.region = REGIONS[region]
-        self.loginname = loginname
+        self.loginname = loginname.strip()
         self.password = password
         self.app_id = app_id
         self.language = language
@@ -381,8 +381,7 @@ class SaveFamilyApiClient:
         if status == 3:
             raise SaveFamilyUpgradeRequiredError(
                 "SaveFamily server refused the login with a 'please upgrade the app' "
-                "block (status 3). The public API endpoint is now closed to this client "
-                "and the live API sits behind a mutual-TLS wall; this cannot be fixed by "
-                f"retrying or changing the client version. Server said: {message}"
+                "block (status 3). The server protocol has probably changed again; "
+                f"check for an update of the integration. Server said: {message}"
             )
         raise SaveFamilyResponseError(status, message, payload)

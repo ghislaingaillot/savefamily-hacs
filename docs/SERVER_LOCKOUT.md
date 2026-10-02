@@ -78,13 +78,19 @@ analysis.
   failure) instead of an endless `ConfigEntryNotReady` retry loop.
 - The config flow shows the `upgrade_required` error with a link to this document.
 
-This does not restore connectivity — nothing can, from code alone — but it stops
-the silent retry loop and tells the user exactly why.
+In v0.4.0 this did not restore connectivity, but it stopped the silent retry loop
+and told the user why. Since v0.4.1 login works again (see the top of this
+document); a `status 3` now means the server protocol changed again and the
+integration needs an update.
 
-## Recovery path (requires a rooted device / emulator running the official app)
+## Recovery path (historical — not needed since v0.4.1)
 
-The only way to make the integration work again is to capture what the live app
-actually sends, then port it here. A ready-to-run Frida harness and a full runbook
+> This section documents the plan considered before the upstream fix. The mTLS
+> client identity now ships with the integration (`core/client.pem`), so none of
+> these steps are required.
+
+Before v0.4.1, the only way to make the integration work again was to capture what
+the live app actually sends, then port it here. A ready-to-run Frida harness and a full runbook
 are provided in [`docs/frida/`](frida/README.md):
 
 - [`frida/capture_savefamily.js`](frida/capture_savefamily.js) — hooks the native
