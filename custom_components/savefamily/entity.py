@@ -5,6 +5,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, MANUFACTURER
 from .coordinator import SaveFamilyDataUpdateCoordinator
+from .core.protocol import SaveFamilyWatch
 
 
 class SaveFamilyEntity(CoordinatorEntity[SaveFamilyDataUpdateCoordinator]):
@@ -20,15 +21,18 @@ class SaveFamilyEntity(CoordinatorEntity[SaveFamilyDataUpdateCoordinator]):
 
     @property
     def device_info(self) -> DeviceInfo:
-        watch = self.snapshot.watch
-        return DeviceInfo(
-            identifiers={(DOMAIN, watch.did)},
-            name=watch.name,
-            manufacturer=MANUFACTURER,
-            model=watch.model or None,
-            serial_number=watch.did,
-        )
+        return watch_device_info(self.snapshot.watch)
 
     @property
     def snapshot(self):
         return self.coordinator.data[self._did]
+
+
+def watch_device_info(watch: SaveFamilyWatch) -> DeviceInfo:
+    return DeviceInfo(
+        identifiers={(DOMAIN, watch.did)},
+        name=watch.name,
+        manufacturer=MANUFACTURER,
+        model=watch.model or None,
+        serial_number=watch.did,
+    )

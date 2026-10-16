@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import ssl
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urljoin
@@ -21,6 +22,7 @@ from .protocol import (
     DEVICE_OFFLINE_STATUS,
     REGIONS,
     SUCCESS_STATUSES,
+    DndPeriod,
     SaveFamilyAuthError,
     SaveFamilyConnectionError,
     SaveFamilyError,
@@ -32,8 +34,10 @@ from .protocol import (
     build_watch_state,
     coerce_int,
     compute_sign,
+    dnd_schedule_fields,
     hash_password,
     is_login_timeout_response,
+    supports_dnd_schedule,
 )
 from .transport import (
     ENCRYPT_INDEX_HEADER,
@@ -126,13 +130,13 @@ class SaveFamilyApiClient:
         return states
 
     async def async_request_location(self, did: str) -> dict[str, Any]:
-        watch = await self._async_ensure_watch(did)
+        watch = await self._async_ensure_watch(did, require_model=True)
         response = await self._async_send_order(
             f"test?dev_id={watch.did}&com=D3&dev_model={watch.model}",
         )
         if is_login_timeout_response(response):
             await self._async_reauthenticate()
-            watch = await self._async_ensure_watch(did)
+            watch = await self._async_ensure_watch(did, require_model=True)
             response = await self._async_send_order(
                 f"test?dev_id={watch.did}&com=D3&dev_model={watch.model}",
             )
@@ -196,7 +200,64 @@ class SaveFamilyApiClient:
         response.setdefault("data", [])
         return response
 
-    async def _async_ensure_watch(self, did: str) -> SaveFamilyWatch:
+    async def async_find_set_info(self, did: str) -> dict[str, Any]:
+        """Fetch shared settings, including DND, SOS numbers and SMS alerts."""
+
+        async def send(watch: SaveFamilyWatch) -> dict[str, Any]:
+            return await self._request_json(
+                "GET",
+                self._session_path("/S10APP/v2_findSetInfo"),
+                params=self._signed_params(
+                    {
+                        "language": self.language,
+                        "did_id": watch.did_id,
+                        "did": watch.did,
+                    }
+                ),
+            )
+
+        response = await self._async_watch_request(did, send)
+        self._ensure_status(response, SUCCESS_STATUSES)
+        return response
+
+    async def async_set_dnd_schedule(self, did: str, periods: Sequence[DndPeriod]) -> dict[str, Any]:
+        """Replace the DC == 2 schedule, clearing unused slots."""
+        fields = dnd_schedule_fields(periods)
+
+        async def send(watch: SaveFamilyWatch) -> dict[str, Any]:
+            if not supports_dnd_schedule(watch.config):
+                raise SaveFamilyError("DND schedule writing requires a watch advertising DC:2")
+            return await self._request_json(
+                "POST",
+                "/S10APP/upNewDndSetInfo",
+                data=self._signed_params(
+                    {
+                        "sid": self.session_id,
+                        "did": watch.did,
+                        "did_id": watch.did_id,
+                        "language": self.language,
+                        **fields,
+                    }
+                ),
+            )
+
+        response = await self._async_watch_request(did, send)
+        self._ensure_status(response, {1})
+        return response
+
+    async def _async_watch_request(
+        self,
+        did: str,
+        send: Callable[[SaveFamilyWatch], Awaitable[dict[str, Any]]],
+    ) -> dict[str, Any]:
+        """Send with current watch metadata, retrying an expired session once."""
+        response = await send(await self._async_ensure_watch(did))
+        if is_login_timeout_response(response):
+            await self._async_reauthenticate()
+            response = await send(await self._async_ensure_watch(did))
+        return response
+
+    async def _async_ensure_watch(self, did: str, *, require_model: bool = False) -> SaveFamilyWatch:
         if did not in self._watches or not self.session_id:
             await self.async_login()
         if did not in self._watches and self.user_id is not None:
@@ -208,7 +269,7 @@ class SaveFamilyApiClient:
         watch = self._watches.get(did)
         if watch is None:
             raise SaveFamilyError(f"unknown watch {did}")
-        if not watch.model:
+        if require_model and not watch.model:
             raise SaveFamilyError(f"device model is required for {did}")
         return watch
 

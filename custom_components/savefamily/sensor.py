@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.const import PERCENTAGE
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import SaveFamilyConfigEntry
-from .entity import SaveFamilyEntity
+from .coordinator import SaveFamilyDndSettingsCoordinator
+from .core.protocol import SaveFamilyWatch, supports_dnd_schedule
+from .entity import SaveFamilyEntity, watch_device_info
 
 
 async def async_setup_entry(
@@ -15,7 +20,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data.coordinator
-    entities_by_did: dict[str, list[SaveFamilyEntity]] = {}
+    dnd_coordinator = entry.runtime_data.dnd_coordinator
+    entities_by_did: dict[str, list[SensorEntity]] = {}
 
     @callback
     def _async_handle_update() -> None:
@@ -27,6 +33,9 @@ async def async_setup_entry(
                     SaveFamilyLastFixSensor(coordinator, did),
                     SaveFamilyStepsSensor(coordinator, did),
                 ]
+                watch = coordinator.data[did].watch
+                if supports_dnd_schedule(watch.config):
+                    es.append(SaveFamilyDndScheduleSensor(dnd_coordinator, watch))
                 entities_by_did[did] = es
                 new_entities.extend(es)
         if new_entities:
@@ -77,3 +86,36 @@ class SaveFamilyStepsSensor(SaveFamilyEntity, SensorEntity):
     @property
     def native_value(self) -> int | None:
         return self.snapshot.step_count
+
+
+class SaveFamilyDndScheduleSensor(CoordinatorEntity[SaveFamilyDndSettingsCoordinator], SensorEntity):
+    """Configured schedule, not the watch's current DND state."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "dnd_schedule"
+    _attr_icon = "mdi:bell-sleep"
+
+    def __init__(self, coordinator: SaveFamilyDndSettingsCoordinator, watch: SaveFamilyWatch) -> None:
+        super().__init__(coordinator)
+        self._did = watch.did
+        self._attr_unique_id = f"{watch.did}_dnd_schedule"
+        self._attr_device_info = watch_device_info(watch)
+
+    @property
+    def native_value(self) -> str | None:
+        periods = (self.coordinator.data or {}).get(self._did)
+        if periods is None:
+            return None
+        return "; ".join(str(period) for period in periods) or "off"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        periods = (self.coordinator.data or {}).get(self._did)
+        if periods is None:
+            return {}
+        return {
+            "periods": [
+                {"start": period.start, "end": period.end, "weekdays": period.weekday_names}
+                for period in periods
+            ]
+        }

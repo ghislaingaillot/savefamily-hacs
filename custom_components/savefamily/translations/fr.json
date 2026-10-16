@@ -49,6 +49,9 @@
       },
       "steps": {
         "name": "Pas"
+      },
+      "dnd_schedule": {
+        "name": "Programme Ne pas déranger"
       }
     },
     "binary_sensor": {
@@ -62,6 +65,18 @@
     "button": {
       "request_location": {
         "name": "Rafraîchir la position"
+      }
+    }
+  },
+  "services": {
+    "set_dnd_schedule": {
+      "name": "Définir le programme Ne pas déranger",
+      "description": "Remplace les 4 créneaux du programme Ne pas déranger d'une montre compatible. Les créneaux omis sont effacés. Passer une liste vide pour effacer le programme.",
+      "fields": {
+        "periods": {
+          "name": "Créneaux",
+          "description": "Jusqu'à 4 créneaux au format DÉBUT-FIN:JOURS, par ex. 08:00-15:00:mon,tue,wed,thu,fri. Heures locales de la montre, début avant la fin. Passer [] pour tout effacer."
+        }
       }
     }
   }

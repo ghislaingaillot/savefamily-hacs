@@ -85,6 +85,7 @@ Extra attributes: `did`, `did_id`, `model`, `address`, `speed_kmh`, `direction_d
 | `sensor.<name>_battery` | % | Watch battery level |
 | `sensor.<name>_last_fix` | timestamp | Timestamp of the last GPS update |
 | `sensor.<name>_steps` | steps | Daily step count *(model-dependent)* |
+| `sensor.<name>_do_not_disturb_schedule` | — | Configured Do Not Disturb schedule *(compatible watches only, see below)* |
 
 ### Binary Sensors
 
@@ -98,6 +99,27 @@ Extra attributes: `did`, `did_id`, `model`, `address`, `speed_kmh`, `direction_d
 | Entity | Description |
 |--------|-------------|
 | `button.<name>_refresh_location` | Sends a GPS poll command to the watch to force an immediate update |
+
+### Do Not Disturb schedule
+
+On watches that support it (they advertise `DC:2` in their configuration), the integration adds a sensor showing the configured Do Not Disturb schedule, for example `08:00-15:00:mon,tue,wed,thu,fri`, or `off` when no period is enabled. The periods are also available in its `periods` attribute. This is the configured schedule, not the watch's current Do Not Disturb state. It refreshes every 30 minutes and right after a change.
+
+The **`savefamily.set_dnd_schedule`** action writes the schedule, from Developer Tools, a script or an automation:
+
+```yaml
+action: savefamily.set_dnd_schedule
+target:
+  device_id: YOUR_WATCH_DEVICE_ID
+data:
+  periods:
+    - "08:00-12:00:mon,tue,wed,thu,fri"
+    - "13:30-16:30:mon,tue,thu,fri"
+```
+
+- Up to 4 periods, as `START-END:DAYS` with days among `sun,mon,tue,wed,thu,fri,sat`.
+- Times use the watch's local clock; the start must be before the end (no overnight period).
+- The action replaces the whole schedule: omitted slots are cleared. Pass `periods: []` to clear it.
+- Device, entity, area and label targets are supported; watches without Do Not Disturb support are skipped.
 
 ---
 
@@ -252,6 +274,7 @@ Attributs supplémentaires : `did`, `did_id`, `model`, `address`, `speed_kmh`, `
 | `sensor.<nom>_batterie` | % | Niveau de charge de la montre |
 | `sensor.<nom>_derniere_position` | timestamp | Horodatage de la dernière mise à jour GPS |
 | `sensor.<nom>_pas` | steps | Nombre de pas du jour *(selon le modèle)* |
+| `sensor.<nom>_programme_ne_pas_deranger` | — | Programme Ne pas déranger configuré *(montres compatibles uniquement, voir ci-dessous)* |
 
 ### Capteurs binaires (Binary Sensors)
 
@@ -265,6 +288,27 @@ Attributs supplémentaires : `did`, `did_id`, `model`, `address`, `speed_kmh`, `
 | Entité | Description |
 |--------|-------------|
 | `button.<nom>_rafraichir_la_position` | Envoie une commande GPS à la montre pour forcer une mise à jour immédiate |
+
+### Programme Ne pas déranger
+
+Sur les montres compatibles (celles qui annoncent `DC:2` dans leur configuration), l'intégration ajoute un capteur qui affiche le programme Ne pas déranger configuré, par exemple `08:00-15:00:mon,tue,wed,thu,fri`, ou `off` si aucun créneau n'est actif. Les créneaux sont aussi disponibles dans son attribut `periods`. Il s'agit du programme configuré, pas de l'état actuel de la montre. Il est rafraîchi toutes les 30 minutes et juste après une modification.
+
+L'action **`savefamily.set_dnd_schedule`** permet de modifier le programme, depuis les Outils de développement, un script ou une automatisation :
+
+```yaml
+action: savefamily.set_dnd_schedule
+target:
+  device_id: ID_DE_LA_MONTRE
+data:
+  periods:
+    - "08:00-12:00:mon,tue,wed,thu,fri"
+    - "13:30-16:30:mon,tue,thu,fri"
+```
+
+- Jusqu'à 4 créneaux, au format `DÉBUT-FIN:JOURS` avec les jours parmi `sun,mon,tue,wed,thu,fri,sat`.
+- Les heures sont celles de la montre ; le début doit précéder la fin (pas de créneau à cheval sur minuit).
+- L'action remplace tout le programme : les créneaux omis sont effacés. Passer `periods: []` pour tout effacer.
+- Les cibles appareil, entité, pièce et label sont acceptées ; les montres non compatibles sont ignorées.
 
 ---
 
