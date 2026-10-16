@@ -13,6 +13,10 @@ Unofficial Home Assistant integration for **SaveFamily** GPS smartwatches for ki
 
 This integration exposes the GPS position, battery level, step counter and connection status of each watch in Home Assistant.
 
+Find this integration useful? You can support its development:
+
+<a href="https://buymeacoffee.com/ghis" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="41" width="174"></a>
+
 > **Technical note:** SaveFamily runs on the shared 3G Electronics backend (`myaqsh.com`), the same platform used by YQT Smart, SeTracker and CarePro+. This integration is inspired by the open-source project [yqt-smart-api](https://github.com/Niek/yqt-smart-api).
 
 ---
@@ -175,6 +179,10 @@ This is an unofficial project, not affiliated with SaveFamily. It is provided "a
 Intégration Home Assistant non officielle pour les montres connectées **SaveFamily** (montres GPS pour enfants).
 
 Cette intégration expose la position GPS, le niveau de batterie, le compteur de pas et le statut de connexion de chaque montre dans Home Assistant.
+
+Cette intégration vous est utile ? Vous pouvez soutenir son développement :
+
+<a href="https://buymeacoffee.com/ghis" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="41" width="174"></a>
 
 > **Note technique** : SaveFamily utilise la plateforme backend partagée de 3G Electronics (`myaqsh.com`), identique à YQT Smart, SeTracker et CarePro+. Cette intégration est adaptée du projet open-source [yqt-smart-api](https://github.com/Niek/yqt-smart-api).
 
