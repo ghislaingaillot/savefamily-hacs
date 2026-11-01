@@ -1,5 +1,7 @@
 # SaveFamily server lockout (status 3 — "The current app is unavailable. Please upgrade the app.")
 
+*[Français ci-dessous](#blocage-du-serveur-savefamily-statut-3)*
+
 ## Resolved in v0.4.1
 
 The upstream reference project [yqt-smart-api](https://github.com/Niek/yqt-smart-api)
@@ -118,3 +120,136 @@ Track the upstream reference project
 [Niek/yqt-smart-api](https://github.com/Niek/yqt-smart-api/issues/7), which hit
 the identical wall on the same day — a community fix there will likely reveal the
 new parameters for everyone.
+
+---
+---
+
+# Blocage du serveur SaveFamily (statut 3)
+
+Message du serveur : *« The current app is unavailable. Please upgrade the app. »*
+
+## Résolu en v0.4.1
+
+Le projet de référence [yqt-smart-api](https://github.com/Niek/yqt-smart-api) a
+retrouvé le nouveau protocole (commit
+[`5ee1a46`](https://github.com/Niek/yqt-smart-api/commit/5ee1a46)) : l'API réelle
+est passée sur des endpoints à TLS mutuel (`:11001`–`:11003`), avec une enveloppe
+JSON chiffrée en AES-CBC autour des paramètres signés habituels. L'intégration
+embarque désormais le certificat client correspondant (`core/client.pem`) et le
+transport de chiffrement/déchiffrement (`core/transport.py`), portés directement
+depuis ce correctif. Il n'a finalement pas été nécessaire d'extraire
+`appid`/`version`/`flag` de l'APK ; la suite de ce document retrace l'enquête.
+
+## Symptôme (v0.3.x et antérieures)
+
+Home Assistant n'arrive pas à configurer l'intégration et réessaie sans fin avec :
+
+```
+status=3: API version rejected by server (update the integration):
+The current app is unavailable. Please upgrade the app.
+```
+
+Depuis la **v0.4.0**, l'intégration ne réessaie plus indéfiniment dans ce cas :
+elle lève une erreur permanente et explicative (voir « Comportement de
+l'intégration » ci-dessous).
+
+## Cause (vérifiée sur le serveur réel le 2026-07-24)
+
+Ce n'est **pas un bug de l'intégration**, et **changer une constante de version
+ne suffit pas**. Le backend LinksField/tgelec derrière SaveFamily (`*.myaqsh.com`)
+a fermé le chemin de connexion rétro-ingénié. Constats sur
+`https://europe.myaqsh.com:8093/app/public/S10APP/v2_new_userLogin2` :
+
+1. **Le champ `version` est le seul verrou, et toutes les valeurs sont refusées.**
+   - `version <= 1.0.1` → `status 3`, message *« The old version have stopped… »*,
+     avec une URL de mise à jour (`com.tgelec.yqtsmart`).
+   - **toute autre valeur** (`1.0.2`, `1.0.3`, `1.1.5`, `1.3.9`, `2.0.0`, le
+     versionCode `40` de l'APK, des dates…) → `status 3`, message *« The current
+     app is unavailable. Please upgrade the app. »*, avec un champ `version` **vide**.
+   - Le 2026-07-06, `version=1.0.2` fonctionnait encore ; le blocage a été durci ensuite.
+2. **`appid` est totalement ignoré** à ce stade. `aaagg11145` (la valeur livrée
+   par l'intégration), une chaîne vide ou n'importe quoi donnent la même réponse.
+   `aaagg11145` est en fait l'identifiant de l'app **YQT SMART**
+   (`com.tgelec.yqtsmart`), pas de SaveFamily : les deux sont des marques blanches
+   du même backend.
+3. **La signature n'est pas en cause.** Un `sign` volontairement faux donne le même
+   `status 3`, et une requête `version=1.0.1` correctement signée est bien analysée
+   et contrôlée : `sign` / `sign_flag=KHDIW` sont donc toujours acceptés.
+4. **L'API réelle est passée derrière du TLS mutuel.** Les ports `11001`, `11002`
+   et `11003` des mêmes serveurs répondent `HTTP 400 "No required SSL certificate
+   was sent"` (nginx `ssl_verify_client on`). L'app officielle à jour s'y
+   authentifie avec un **certificat client**.
+
+### Pourquoi le certificat client ne peut pas être extrait en statique
+
+L'APK actuel (`com.tgelec.savefamily` 1.3.9, versionCode 40) est :
+
+- **protégé par Baidu** (`assets/baiduprotect*.jar` / `*.i.dex`) : le vrai code
+  Dalvik et ses chaînes sont chiffrés et ne sont restaurés qu'à l'exécution ;
+- ses identifiants de connexion sont générés en **code natif** : `libnative-lib.so`
+  exporte `NativeUtils.getAppId()`, `getVersion()`, `getFlag()`, ainsi que
+  `encrypt()`/`decrypt()` et une clé littérale `ThisIsMySecretNativeKey123`. Dans
+  le `.so` livré, ces fonctions sont des **bouchons** du packer (`getFlag` =
+  `mov w0,#0; ret` ; `getAppId`/`getVersion` renvoient une chaîne vide) : les
+  vraies valeurs sont fournies à l'exécution ;
+- les assets de l'APK ne contiennent que le CA **serveur** (`assets/ca.crt`,
+  `CN=linksfield.net`, expiré le 2025-04-15), **aucun certificat ni clé client**.
+
+L'identité client nécessaire à la nouvelle API mTLS n'existe donc que dans l'app
+officielle en cours d'exécution. La récupérer demande de l'**instrumentation
+dynamique**, pas de l'analyse statique.
+
+## Comportement de l'intégration (v0.4.0+)
+
+- Le `status 3` correspond maintenant à une `SaveFamilyUpgradeRequiredError` dédiée.
+- Pendant la configuration ou l'interrogation, le coordinateur lève une
+  `ConfigEntryError` (échec *permanent*) au lieu d'une boucle infinie de
+  `ConfigEntryNotReady`.
+- L'assistant de configuration affiche l'erreur `upgrade_required` avec un lien
+  vers ce document.
+
+En v0.4.0, cela ne rétablissait pas la connexion, mais arrêtait la boucle
+silencieuse et expliquait la cause à l'utilisateur. Depuis la v0.4.1, la connexion
+fonctionne à nouveau (voir le début du document) ; un `status 3` signifie
+désormais que le protocole du serveur a encore changé et que l'intégration doit
+être mise à jour.
+
+## Piste de récupération (historique, inutile depuis la v0.4.1)
+
+> Cette section décrit le plan envisagé avant le correctif amont. L'identité
+> client mTLS est maintenant livrée avec l'intégration (`core/client.pem`) : aucune
+> de ces étapes n'est nécessaire.
+
+Avant la v0.4.1, la seule façon de refaire fonctionner l'intégration était de
+capturer ce qu'envoie réellement l'app, puis de le porter ici. Un script Frida
+prêt à l'emploi et une procédure complète sont fournis dans
+[`docs/frida/`](frida/README.md) :
+
+- [`frida/capture_savefamily.js`](frida/capture_savefamily.js) : intercepte les
+  fonctions natives `NativeUtils.getAppId/getVersion/getFlag`, extrait la **chaîne
+  de certificats et la clé privée du client mTLS** (via la couche Java
+  `X509KeyManager`/`KeyStore`, avec repli sur `libssl` natif) et journalise la
+  vraie requête de connexion.
+- [`frida/README.md`](frida/README.md) : prérequis (appareil ou émulateur rooté,
+  `frida-server`), exécution, enregistrement de `client-cert.pem` /
+  `client-key.pem`, et intégration de l'identité dans `core/async_client.py`.
+
+Résumé des étapes :
+
+1. Sur un appareil ou émulateur rooté, installer l'app officielle **SaveFamily**,
+   lancer
+   `frida -U -f com.tgelec.savefamily -l docs/frida/capture_savefamily.js --no-pause`,
+   puis se connecter pour déclencher la poignée de main TLS et la requête de connexion.
+2. Recopier les `appid`/`version`/`flag` affichés dans `core/protocol.py`.
+3. Enregistrer le certificat et la clé privée affichés dans `client-cert.pem` /
+   `client-key.pem` (ou récupérer le keystore embarqué dont le mot de passe est affiché).
+4. Adapter `core/async_client.py` pour dialoguer avec l'endpoint mTLS
+   (`:11001`–`:11003`) avec ce certificat (`ssl.SSLContext.load_cert_chain`),
+   mettre à jour les URL et l'endpoint de connexion d'après la requête capturée,
+   rendre le chemin du certificat configurable, et lever le blocage
+   `ConfigEntryError` une fois la connexion rétablie.
+
+Suivre le projet de référence
+[Niek/yqt-smart-api](https://github.com/Niek/yqt-smart-api/issues/7), qui a heurté
+le même mur le même jour : un correctif communautaire y révélera probablement les
+nouveaux paramètres pour tout le monde.

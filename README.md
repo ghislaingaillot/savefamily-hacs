@@ -17,7 +17,7 @@ Find this integration useful? You can support its development:
 
 <a href="https://buymeacoffee.com/ghis" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="41" width="174"></a>
 
-> **Technical note:** SaveFamily runs on the shared 3G Electronics backend (`myaqsh.com`), the same platform used by YQT Smart, SeTracker and CarePro+. This integration is inspired by the open-source project [yqt-smart-api](https://github.com/Niek/yqt-smart-api).
+> **Technical note:** SaveFamily runs on the shared 3G Electronics backend (`myaqsh.com`), the same platform used by YQT Smart, SeTracker and CarePro+. This integration is inspired by the open-source project [yqt-smart-api](https://github.com/Niek/yqt-smart-api). How each feature was derived from the app, and how far it has been verified, is documented in [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md).
 
 ---
 
@@ -228,6 +228,10 @@ The **App ID** field is not involved: the server returns the same response whate
 
 > Intercepting the app traffic with mitmproxy no longer works since v0.4.1: the API now uses mutual TLS with encrypted payloads. It is not needed anyway.
 
+### A new feature (v0.6.0) shows nothing or fails
+
+Alarms, signal, work mode, SOS numbers, safe zones, photos, remote commands and position history come from an analysis of the app and had not all been tested on a real watch when they were released (see [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md)). An entity that stays `unknown` usually means the server rejected that request: enable debug logs (below) and open an [issue](https://github.com/ghislaingaillot/savefamily-hacs/issues) with the `v2_…` / `findDevice…` lines. These failures never block location updates.
+
 ### Enable debug logs
 
 Add to `configuration.yaml`:
@@ -280,7 +284,7 @@ Cette intégration vous est utile ? Vous pouvez soutenir son développement :
 
 <a href="https://buymeacoffee.com/ghis" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="41" width="174"></a>
 
-> **Note technique** : SaveFamily utilise la plateforme backend partagée de 3G Electronics (`myaqsh.com`), identique à YQT Smart, SeTracker et CarePro+. Cette intégration est adaptée du projet open-source [yqt-smart-api](https://github.com/Niek/yqt-smart-api).
+> **Note technique** : SaveFamily utilise la plateforme backend partagée de 3G Electronics (`myaqsh.com`), identique à YQT Smart, SeTracker et CarePro+. Cette intégration est adaptée du projet open-source [yqt-smart-api](https://github.com/Niek/yqt-smart-api). L'origine de chaque fonction dans l'application, et son niveau de vérification, sont décrits dans [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md#analyse-de-lapplication-savefamily-v060).
 
 ---
 
@@ -490,6 +494,10 @@ Le serveur a refusé la connexion (`Either account is not registered, Area selec
 Le champ **App ID** n'est pas en cause : le serveur renvoie la même réponse quelle que soit sa valeur, garder la valeur par défaut (`aaagg11145`).
 
 > L'interception du trafic de l'application avec mitmproxy ne fonctionne plus depuis la v0.4.1 : l'API utilise désormais du TLS mutuel avec des données chiffrées. Ce n'est de toute façon plus nécessaire.
+
+### Une nouvelle fonction (v0.6.0) n'affiche rien ou échoue
+
+Alarmes, signal, mode de fonctionnement, numéros SOS, zones de sécurité, photos, commandes à distance et historique des positions proviennent d'une analyse de l'application et n'avaient pas tous été testés sur une vraie montre à leur sortie (voir [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md#analyse-de-lapplication-savefamily-v060)). Une entité qui reste `inconnu` signifie en général que le serveur a refusé la requête : activez les logs de debug (ci-dessous) et ouvrez une [issue](https://github.com/ghislaingaillot/savefamily-hacs/issues) avec les lignes `v2_…` / `findDevice…`. Ces échecs ne bloquent jamais la mise à jour de la position.
 
 ### Activer les logs de debug
 
