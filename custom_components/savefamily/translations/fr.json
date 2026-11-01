@@ -52,6 +52,15 @@
       },
       "dnd_schedule": {
         "name": "Programme Ne pas déranger"
+      },
+      "signal": {
+        "name": "Signal GSM"
+      },
+      "sos_numbers": {
+        "name": "Numéros SOS"
+      },
+      "safe_zones": {
+        "name": "Zones de sécurité"
       }
     },
     "binary_sensor": {
@@ -65,6 +74,55 @@
     "button": {
       "request_location": {
         "name": "Rafraîchir la position"
+      },
+      "find_watch": {
+        "name": "Faire sonner la montre"
+      },
+      "take_photo": {
+        "name": "Prendre une photo"
+      },
+      "restart": {
+        "name": "Redémarrer"
+      },
+      "power_off": {
+        "name": "Éteindre"
+      }
+    },
+    "select": {
+      "work_mode": {
+        "name": "Mode de fonctionnement",
+        "state": {
+          "realtime": "Temps réel (1 min)",
+          "normal": "Normal (10 min)",
+          "power_saving": "Économie d'énergie (1 h)"
+        }
+      }
+    },
+    "image": {
+      "latest_photo": {
+        "name": "Dernière photo"
+      }
+    },
+    "event": {
+      "alarm": {
+        "name": "Alarme",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "sos": "SOS",
+              "low_battery": "Batterie faible",
+              "geofence_exit": "Sortie de zone de sécurité",
+              "geofence_enter": "Entrée dans une zone de sécurité",
+              "watch_removed": "Montre retirée",
+              "fall": "Chute détectée",
+              "home_school_arrival": "Arrivée maison/école",
+              "home_school_departure": "Départ maison/école",
+              "auth_code": "Code d'autorisation",
+              "mode_change": "Changement de mode",
+              "other": "Autre"
+            }
+          }
+        }
       }
     }
   },
@@ -76,6 +134,40 @@
         "periods": {
           "name": "Créneaux",
           "description": "Jusqu'à 4 créneaux au format DÉBUT-FIN:JOURS, par ex. 08:00-15:00:mon,tue,wed,thu,fri. Heures locales de la montre, début avant la fin. Passer [] pour tout effacer."
+        }
+      }
+    },
+    "set_sos_numbers": {
+      "name": "Définir les numéros SOS",
+      "description": "Remplace les numéros SOS d'une montre (5 maximum). Les emplacements omis sont effacés ; passer [] pour tout effacer.",
+      "fields": {
+        "numbers": {
+          "name": "Numéros",
+          "description": "Jusqu'à 5 numéros de téléphone, par ex. [\"0612345678\"]."
+        }
+      }
+    },
+    "call_back": {
+      "name": "Rappel (écoute à distance)",
+      "description": "Demande à la montre d'appeler discrètement un numéro pour entendre son environnement.",
+      "fields": {
+        "phone_number": {
+          "name": "Numéro de téléphone",
+          "description": "Numéro que la montre doit appeler."
+        }
+      }
+    },
+    "get_position_history": {
+      "name": "Obtenir l'historique des positions",
+      "description": "Renvoie les positions enregistrées par une montre sur une période de 24 heures maximum.",
+      "fields": {
+        "start": {
+          "name": "Début",
+          "description": "Début de la période (heure locale de Home Assistant)."
+        },
+        "end": {
+          "name": "Fin",
+          "description": "Fin de la période ; maintenant par défaut."
         }
       }
     }

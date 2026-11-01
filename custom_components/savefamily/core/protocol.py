@@ -40,6 +40,48 @@ _DND_TIME = r"(?:[01][0-9]|2[0-3]):[0-5][0-9]"
 _DND_WIRE = re.compile(rf"({_DND_TIME})-({_DND_TIME})-([01]{{7}})")
 _DND_INPUT = re.compile(rf"({_DND_TIME})-({_DND_TIME}):([a-z, ]+)", re.IGNORECASE | re.ASCII)
 
+# Shared settings flags (SettingResponse.parseSetting compares batteryopen etc. with 2).
+SETTING_OPEN = "2"
+SETTING_CLOSED = "1"
+
+# AlarmInfo.TYPE_* constants of the com.tgelec.aqsh app.
+ALARM_TYPES: dict[int, str] = {
+    1: "sos",
+    2: "low_battery",
+    3: "geofence_exit",
+    4: "geofence_enter",
+    5: "watch_removed",
+    6: "fall",
+    7: "home_school_arrival",
+    8: "home_school_departure",
+    9: "auth_code",
+    10: "mode_change",
+}
+ALARM_TYPE_OTHER = "other"
+ALARM_FETCH_COUNT = 20
+
+# WorkModeActivity upload intervals, in seconds; Setting.DEFAULT_UPINTERVAL is 600.
+WORK_MODES: dict[str, int] = {
+    "realtime": 60,
+    "normal": 600,
+    "power_saving": 3600,
+}
+
+MAX_SOS_NUMBERS = 5
+SAFE_ZONE_OPEN = 1
+POSITION_HISTORY_DATE_FORMAT = "%Y-%m-%d %H:%M"
+
+# v2_sendOrder command codes (n7.b command builders of the app).
+COMMAND_REQUEST_LOCATION = "D3"
+COMMAND_RESTART = "D2"
+COMMAND_POWER_OFF = "D17"
+COMMAND_FIND_WATCH = "D12"
+COMMAND_TAKE_PHOTO = "D75"
+COMMAND_CALL_BACK = "D18"
+COMMAND_WORK_MODE = "D1"
+COMMAND_SOS_NUMBERS = "D7"
+_PHONE_NUMBER = re.compile(r"\+?[0-9]{3,20}")
+
 
 @dataclass(frozen=True, slots=True)
 class RegionConfig:
@@ -176,6 +218,81 @@ class SaveFamilyWatchState:
     raw_response: dict[str, Any] = field(default_factory=dict)
     last_poll_status: int | None = None
     last_poll_message: str = ""
+    signal: int | None = None
+    new_alarms: tuple[SaveFamilyAlarm, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class SaveFamilyAlarm:
+    """One row of v2_findAlarmInfo."""
+
+    id: int
+    type: str
+    type_code: int | None
+    message: str
+    created: datetime | None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "alarm_id": self.id,
+            "type": self.type,
+            "type_code": self.type_code,
+            "message": self.message,
+            "created": self.created.isoformat() if self.created else None,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class SafeZone:
+    """One geofence of v2_new_findRailInfo."""
+
+    id: str
+    number: int | None
+    name: str
+    latitude: float
+    longitude: float
+    radius: int | None
+    enabled: bool
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "radius": self.radius,
+            "enabled": self.enabled,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PhotoWallItem:
+    id: int
+    filename: str
+    created: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class SaveFamilySettings:
+    """Parsed v2_findSetInfo row; setting_id is required to write it back."""
+
+    setting_id: str
+    upinterval: int | None
+    sos_numbers: tuple[str, ...]
+    center_number: str
+    dnd_periods: list[DndPeriod] | None
+
+    @property
+    def work_mode(self) -> str | None:
+        return next((mode for mode, interval in WORK_MODES.items() if interval == self.upinterval), None)
+
+
+@dataclass(slots=True)
+class SaveFamilyWatchSettings:
+    """Slow-changing data; each part is None when its request failed."""
+
+    settings: SaveFamilySettings | None = None
+    safe_zones: list[SafeZone] | None = None
+    latest_photo: PhotoWallItem | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -268,6 +385,140 @@ def supports_dnd_schedule(config: str) -> bool:
     """Device config is underscore-separated KEY:value pairs; DC:2 means the new DND flow."""
     settings = dict(item.split(":", 1) for item in config.split("_") if ":" in item)
     return settings.get("DC") == "2"
+
+
+def _rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = payload.get("data") if isinstance(payload, dict) else None
+    if isinstance(rows, dict):
+        return [rows]
+    if isinstance(rows, list):
+        return [row for row in rows if isinstance(row, dict)]
+    return []
+
+
+def extract_settings(payload: dict[str, Any]) -> SaveFamilySettings | None:
+    rows = _rows(payload)
+    if not rows:
+        return None
+    row = rows[0]
+    setting_id = row.get("id")
+    if setting_id in (None, ""):
+        return None
+    return SaveFamilySettings(
+        setting_id=str(setting_id),
+        upinterval=coerce_int(row.get("upinterval")),
+        sos_numbers=tuple(
+            str(row.get(f"sosnumber{index}") or "").strip() for index in range(1, MAX_SOS_NUMBERS + 1)
+        ),
+        center_number=str(row.get("centernumber") or "").strip(),
+        dnd_periods=extract_dnd_periods(payload),
+    )
+
+
+def extract_alarms(payload: dict[str, Any]) -> list[SaveFamilyAlarm]:
+    """Alarm rows sorted oldest first; rows without a numeric id are skipped."""
+    alarms = []
+    for row in _rows(payload):
+        alarm_id = coerce_int(row.get("id"))
+        if alarm_id is None:
+            continue
+        type_code = coerce_int(row.get("type"))
+        alarms.append(
+            SaveFamilyAlarm(
+                id=alarm_id,
+                type=ALARM_TYPES.get(type_code, ALARM_TYPE_OTHER) if type_code is not None else ALARM_TYPE_OTHER,
+                type_code=type_code,
+                message=str(row.get("message") or ""),
+                created=parse_position_datetime(row.get("createtime")),
+            )
+        )
+    return sorted(alarms, key=lambda alarm: alarm.id)
+
+
+def _signed_coordinate(value: Any, hemisphere: Any, negative: str) -> float | None:
+    parsed = coerce_float(value)
+    if parsed is not None and str(hemisphere or "").upper() == negative and parsed > 0:
+        return -parsed
+    return parsed
+
+
+def extract_safe_zones(payload: dict[str, Any]) -> list[SafeZone]:
+    zones = []
+    for row in _rows(payload):
+        latitude = _signed_coordinate(row.get("lat"), row.get("northsouth"), "S")
+        longitude = _signed_coordinate(row.get("lng"), row.get("eastwest"), "W")
+        if latitude is None or longitude is None:
+            continue
+        zones.append(
+            SafeZone(
+                id=str(row.get("id", "")),
+                number=coerce_int(row.get("number")),
+                name=str(row.get("name") or ""),
+                latitude=latitude,
+                longitude=longitude,
+                radius=coerce_int(row.get("radii")),
+                enabled=coerce_int(row.get("status")) == SAFE_ZONE_OPEN,
+            )
+        )
+    return zones
+
+
+def photo_wall_filename(path: str) -> str:
+    """v2_downloadPictrueDoor wants the basename; the full stored path returns 404."""
+    return path.replace("\\", "/").rsplit("/", 1)[-1].strip()
+
+
+def extract_latest_photo(payload: dict[str, Any]) -> PhotoWallItem | None:
+    photos = []
+    for row in _rows(payload):
+        photo_id = coerce_int(row.get("id"))
+        filename = photo_wall_filename(str(row.get("path") or ""))
+        if photo_id is None or not filename:
+            continue
+        photos.append(PhotoWallItem(photo_id, filename, parse_position_datetime(row.get("createtime"))))
+    return max(photos, key=lambda photo: photo.id, default=None)
+
+
+def extract_position_history(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Simplify v2_findPositionRecordByOneday rows, preferring Wi-Fi corrected coordinates."""
+    points = []
+    for row in _rows(payload):
+        latitude = _signed_coordinate(row.get("lat"), row.get("northsouth"), "S")
+        longitude = _signed_coordinate(row.get("lng"), row.get("eastwest"), "W")
+        if abs(coerce_int(row.get("datatype")) or 0) == 3:
+            corrected = coerce_float(row.get("lat_co")), coerce_float(row.get("lng_co"))
+            if None not in corrected and corrected != (0, 0):
+                latitude, longitude = corrected
+        if latitude is None or longitude is None or (latitude == 0 and longitude == 0):
+            continue
+        fix = parse_position_datetime(row.get("positiondate"))
+        points.append(
+            {
+                "latitude": latitude,
+                "longitude": longitude,
+                "timestamp": fix.isoformat() if fix else None,
+                "speed": coerce_float(row.get("speed")),
+                "datatype": coerce_int(row.get("datatype")),
+            }
+        )
+    return points
+
+
+def normalize_phone_number(value: str) -> str:
+    number = re.sub(r"[\s().-]", "", value)
+    if not _PHONE_NUMBER.fullmatch(number):
+        raise ValueError(f"invalid phone number {value!r}")
+    return number
+
+
+def command_sendurl(did: str, command: str, *params: str, model: str | None = None) -> str:
+    """Build a v2_sendOrder sendurl the way the app's n7.b builders do."""
+    sendurl = f"test?dev_id={did}&com={command}"
+    for index, value in enumerate(params, start=1):
+        sendurl += f"&param{index}={value}"
+    if model is not None:
+        sendurl += f"&dev_model={model}"
+    return sendurl
 
 
 def _md5_hex(value: str) -> str:

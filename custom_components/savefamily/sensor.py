@@ -3,15 +3,13 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
-from homeassistant.const import PERCENTAGE
+from homeassistant.const import PERCENTAGE, EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import SaveFamilyConfigEntry
-from .coordinator import SaveFamilyDndSettingsCoordinator
-from .core.protocol import SaveFamilyWatch, supports_dnd_schedule
-from .entity import SaveFamilyEntity, watch_device_info
+from .core.protocol import supports_dnd_schedule
+from .entity import SaveFamilyEntity, SaveFamilySettingsEntity
 
 
 async def async_setup_entry(
@@ -20,7 +18,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data.coordinator
-    dnd_coordinator = entry.runtime_data.dnd_coordinator
+    settings_coordinator = entry.runtime_data.settings_coordinator
     entities_by_did: dict[str, list[SensorEntity]] = {}
 
     @callback
@@ -28,14 +26,17 @@ async def async_setup_entry(
         new_entities = []
         for did in coordinator.data:
             if did not in entities_by_did:
+                watch = coordinator.data[did].watch
                 es = [
                     SaveFamilyBatterySensor(coordinator, did),
                     SaveFamilyLastFixSensor(coordinator, did),
                     SaveFamilyStepsSensor(coordinator, did),
+                    SaveFamilySignalSensor(coordinator, did),
+                    SaveFamilySosNumbersSensor(settings_coordinator, watch, "sos_numbers"),
+                    SaveFamilySafeZonesSensor(settings_coordinator, watch, "safe_zones"),
                 ]
-                watch = coordinator.data[did].watch
                 if supports_dnd_schedule(watch.config):
-                    es.append(SaveFamilyDndScheduleSensor(dnd_coordinator, watch))
+                    es.append(SaveFamilyDndScheduleSensor(settings_coordinator, watch, "dnd_schedule"))
                 entities_by_did[did] = es
                 new_entities.extend(es)
         if new_entities:
@@ -88,29 +89,91 @@ class SaveFamilyStepsSensor(SaveFamilyEntity, SensorEntity):
         return self.snapshot.step_count
 
 
-class SaveFamilyDndScheduleSensor(CoordinatorEntity[SaveFamilyDndSettingsCoordinator], SensorEntity):
+class SaveFamilySignalSensor(SaveFamilyEntity, SensorEntity):
+    """Raw GSMSingalResponse.signal value; the app shows it as signal bars."""
+
+    _attr_translation_key = "signal"
+    _attr_icon = "mdi:signal"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, did: str) -> None:
+        super().__init__(coordinator, did)
+        self._attr_unique_id = f"{did}_signal"
+
+    @property
+    def native_value(self) -> int | None:
+        return self.snapshot.signal
+
+
+class SaveFamilySosNumbersSensor(SaveFamilySettingsEntity, SensorEntity):
+    _attr_translation_key = "sos_numbers"
+    _attr_icon = "mdi:phone-alert"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def _numbers(self) -> list[str] | None:
+        watch_settings = self.watch_settings
+        if watch_settings is None or watch_settings.settings is None:
+            return None
+        return [number for number in watch_settings.settings.sos_numbers if number]
+
+    @property
+    def native_value(self) -> int | None:
+        numbers = self._numbers()
+        return None if numbers is None else len(numbers)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        numbers = self._numbers()
+        if numbers is None:
+            return {}
+        attrs: dict[str, Any] = {"numbers": numbers}
+        if center := self.watch_settings.settings.center_number:
+            attrs["center_number"] = center
+        return attrs
+
+
+class SaveFamilySafeZonesSensor(SaveFamilySettingsEntity, SensorEntity):
+    _attr_translation_key = "safe_zones"
+    _attr_icon = "mdi:map-marker-radius"
+
+    @property
+    def native_value(self) -> int | None:
+        watch_settings = self.watch_settings
+        if watch_settings is None or watch_settings.safe_zones is None:
+            return None
+        return len(watch_settings.safe_zones)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        watch_settings = self.watch_settings
+        if watch_settings is None or watch_settings.safe_zones is None:
+            return {}
+        return {"zones": [zone.as_dict() for zone in watch_settings.safe_zones]}
+
+
+class SaveFamilyDndScheduleSensor(SaveFamilySettingsEntity, SensorEntity):
     """Configured schedule, not the watch's current DND state."""
 
-    _attr_has_entity_name = True
     _attr_translation_key = "dnd_schedule"
     _attr_icon = "mdi:bell-sleep"
 
-    def __init__(self, coordinator: SaveFamilyDndSettingsCoordinator, watch: SaveFamilyWatch) -> None:
-        super().__init__(coordinator)
-        self._did = watch.did
-        self._attr_unique_id = f"{watch.did}_dnd_schedule"
-        self._attr_device_info = watch_device_info(watch)
+    def _periods(self):
+        watch_settings = self.watch_settings
+        if watch_settings is None or watch_settings.settings is None:
+            return None
+        return watch_settings.settings.dnd_periods
 
     @property
     def native_value(self) -> str | None:
-        periods = (self.coordinator.data or {}).get(self._did)
+        periods = self._periods()
         if periods is None:
             return None
         return "; ".join(str(period) for period in periods) or "off"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        periods = (self.coordinator.data or {}).get(self._did)
+        periods = self._periods()
         if periods is None:
             return {}
         return {

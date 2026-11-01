@@ -11,7 +11,7 @@
 
 Unofficial Home Assistant integration for **SaveFamily** GPS smartwatches for kids.
 
-This integration exposes the GPS position, battery level, step counter and connection status of each watch in Home Assistant.
+This integration exposes the GPS position, battery level, step counter and connection status of each watch in Home Assistant, along with the watch alarms (SOS, low battery, safe zones, removal, fall), its settings (work mode, SOS numbers, Do Not Disturb, safe zones) and remote actions (find watch, remote photo, listen in, restart, position history).
 
 Find this integration useful? You can support its development:
 
@@ -86,6 +86,43 @@ Extra attributes: `did`, `did_id`, `model`, `address`, `speed_kmh`, `direction_d
 | `sensor.<name>_last_fix` | timestamp | Timestamp of the last GPS update |
 | `sensor.<name>_steps` | steps | Daily step count *(model-dependent)* |
 | `sensor.<name>_do_not_disturb_schedule` | — | Configured Do Not Disturb schedule *(compatible watches only, see below)* |
+| `sensor.<name>_safe_zones` | — | Number of safe zones; the list (name, coordinates, radius, enabled) is in the `zones` attribute |
+| `sensor.<name>_sos_numbers` | — | Number of SOS numbers *(diagnostic)*; `numbers` and `center_number` attributes |
+| `sensor.<name>_gsm_signal` | — | Raw GSM signal value returned by the server *(diagnostic)* |
+
+### Alarms (Event)
+
+| Entity | Description |
+|--------|-------------|
+| `event.<name>_alarm` | Fires for every new alarm reported by the watch |
+
+Event types: `sos`, `low_battery`, `geofence_exit`, `geofence_enter`, `watch_removed`, `fall`, `home_school_arrival`, `home_school_departure`, `auth_code`, `mode_change`, `other`. Attributes: `alarm_id`, `type_code`, `message`, `created`.
+
+Each alarm is also fired on the event bus as `savefamily_alarm` (data: `did`, `watch`, `alarm_id`, `type`, `type_code`, `message`, `created`). Alarms already present when Home Assistant starts are not replayed. Example automation:
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: event.<name>_alarm
+    attribute: event_type
+    to: sos
+actions:
+  - action: notify.mobile_app_my_phone
+    data:
+      message: "SOS triggered on the watch!"
+```
+
+### Select
+
+| Entity | Description |
+|--------|-------------|
+| `select.<name>_work_mode` | Position upload interval: real-time (1 min), normal (10 min), power saving (1 h) |
+
+### Image
+
+| Entity | Description |
+|--------|-------------|
+| `image.<name>_latest_photo` | Latest photo of the photo wall (remote capture or sent from the watch) |
 
 ### Binary Sensors
 
@@ -99,6 +136,43 @@ Extra attributes: `did`, `did_id`, `model`, `address`, `speed_kmh`, `direction_d
 | Entity | Description |
 |--------|-------------|
 | `button.<name>_refresh_location` | Sends a GPS poll command to the watch to force an immediate update |
+| `button.<name>_find_watch` | Makes the watch ring so you can find it |
+| `button.<name>_take_photo` | Remote photo capture; the image refreshes one minute later |
+| `button.<name>_restart` | Restarts the watch *(configuration)* |
+| `button.<name>_power_off` | Powers the watch off *(configuration, disabled by default: the watch must then be switched on by hand)* |
+
+When the watch is offline, a persistent notification says so instead of an error.
+
+### Actions
+
+| Action | Description |
+|--------|-------------|
+| `savefamily.set_dnd_schedule` | Do Not Disturb schedule (see below) |
+| `savefamily.set_sos_numbers` | Replaces the SOS numbers (up to 5) |
+| `savefamily.call_back` | Listen in: the watch silently calls the given number |
+| `savefamily.get_position_history` | Returns the positions recorded over a period of at most 24 hours |
+
+```yaml
+action: savefamily.set_sos_numbers
+target:
+  device_id: YOUR_WATCH_DEVICE_ID
+data:
+  numbers:
+    - "0612345678"
+    - "0698765432"
+```
+
+```yaml
+action: savefamily.get_position_history
+target:
+  device_id: YOUR_WATCH_DEVICE_ID
+data:
+  start: "2026-11-01 08:00:00"
+  end: "2026-11-01 18:00:00"
+response_variable: history
+```
+
+`get_position_history` times are in Home Assistant local time. The response is keyed by watch id (`did`) and holds a `positions` list (`latitude`, `longitude`, `timestamp`, `speed`, `datatype`).
 
 ### Do Not Disturb schedule
 
@@ -135,7 +209,7 @@ The card shows the battery level, the time since the last GPS update, and the cu
 
 ## Data refresh
 
-The integration polls the API every **5 minutes**. The refresh button sends an asynchronous command to the watch, then triggers a new poll 20 seconds later.
+The integration polls the API every **5 minutes** (position, battery, signal, alarms). Settings (work mode, SOS numbers, Do Not Disturb, safe zones, latest photo) are read every **30 minutes** and right after a change. The refresh button sends an asynchronous command to the watch, then triggers a new poll 20 seconds later.
 
 ---
 
@@ -200,7 +274,7 @@ This is an unofficial project, not affiliated with SaveFamily. It is provided "a
 
 Intégration Home Assistant non officielle pour les montres connectées **SaveFamily** (montres GPS pour enfants).
 
-Cette intégration expose la position GPS, le niveau de batterie, le compteur de pas et le statut de connexion de chaque montre dans Home Assistant.
+Cette intégration expose la position GPS, le niveau de batterie, le compteur de pas et le statut de connexion de chaque montre dans Home Assistant, ainsi que les alarmes de la montre (SOS, batterie faible, zones de sécurité, retrait, chute), ses réglages (mode de fonctionnement, numéros SOS, Ne pas déranger, zones de sécurité) et des actions à distance (faire sonner, photo à distance, écoute, redémarrage, historique des positions).
 
 Cette intégration vous est utile ? Vous pouvez soutenir son développement :
 
@@ -275,6 +349,43 @@ Attributs supplémentaires : `did`, `did_id`, `model`, `address`, `speed_kmh`, `
 | `sensor.<nom>_derniere_position` | timestamp | Horodatage de la dernière mise à jour GPS |
 | `sensor.<nom>_pas` | steps | Nombre de pas du jour *(selon le modèle)* |
 | `sensor.<nom>_programme_ne_pas_deranger` | — | Programme Ne pas déranger configuré *(montres compatibles uniquement, voir ci-dessous)* |
+| `sensor.<nom>_zones_de_securite` | — | Nombre de zones de sécurité ; la liste (nom, coordonnées, rayon, active) est dans l'attribut `zones` |
+| `sensor.<nom>_numeros_sos` | — | Nombre de numéros SOS *(diagnostic)* ; attributs `numbers` et `center_number` |
+| `sensor.<nom>_signal_gsm` | — | Valeur brute du signal GSM renvoyée par le serveur *(diagnostic)* |
+
+### Alarmes (Event)
+
+| Entité | Description |
+|--------|-------------|
+| `event.<nom>_alarme` | Se déclenche à chaque nouvelle alarme de la montre |
+
+Types d'événement : `sos`, `low_battery`, `geofence_exit`, `geofence_enter`, `watch_removed`, `fall`, `home_school_arrival`, `home_school_departure`, `auth_code`, `mode_change`, `other`. Attributs : `alarm_id`, `type_code`, `message`, `created`.
+
+Chaque alarme est aussi envoyée sur le bus d'événements sous `savefamily_alarm` (données : `did`, `watch`, `alarm_id`, `type`, `type_code`, `message`, `created`). Les alarmes déjà présentes au démarrage de Home Assistant ne sont pas rejouées. Exemple d'automatisation :
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: event.<nom>_alarme
+    attribute: event_type
+    to: sos
+actions:
+  - action: notify.mobile_app_mon_telephone
+    data:
+      message: "SOS déclenché sur la montre !"
+```
+
+### Sélecteur (Select)
+
+| Entité | Description |
+|--------|-------------|
+| `select.<nom>_mode_de_fonctionnement` | Fréquence de remontée de la position : temps réel (1 min), normal (10 min), économie d'énergie (1 h) |
+
+### Image
+
+| Entité | Description |
+|--------|-------------|
+| `image.<nom>_derniere_photo` | Dernière photo du mur de photos (photo à distance ou envoyée par la montre) |
 
 ### Capteurs binaires (Binary Sensors)
 
@@ -288,6 +399,43 @@ Attributs supplémentaires : `did`, `did_id`, `model`, `address`, `speed_kmh`, `
 | Entité | Description |
 |--------|-------------|
 | `button.<nom>_rafraichir_la_position` | Envoie une commande GPS à la montre pour forcer une mise à jour immédiate |
+| `button.<nom>_faire_sonner_la_montre` | Fait sonner la montre pour la retrouver |
+| `button.<nom>_prendre_une_photo` | Prise de photo à distance ; l'image est rafraîchie une minute plus tard |
+| `button.<nom>_redemarrer` | Redémarre la montre *(configuration)* |
+| `button.<nom>_eteindre` | Éteint la montre *(configuration, désactivé par défaut : la montre devra être rallumée à la main)* |
+
+Si la montre est hors ligne, une notification persistante l'indique au lieu d'une erreur.
+
+### Actions
+
+| Action | Description |
+|--------|-------------|
+| `savefamily.set_dnd_schedule` | Programme Ne pas déranger (voir ci-dessous) |
+| `savefamily.set_sos_numbers` | Remplace les numéros SOS (5 maximum) |
+| `savefamily.call_back` | Écoute à distance : la montre appelle discrètement le numéro donné |
+| `savefamily.get_position_history` | Renvoie les positions enregistrées sur une période de 24 h maximum |
+
+```yaml
+action: savefamily.set_sos_numbers
+target:
+  device_id: ID_DE_LA_MONTRE
+data:
+  numbers:
+    - "0612345678"
+    - "0698765432"
+```
+
+```yaml
+action: savefamily.get_position_history
+target:
+  device_id: ID_DE_LA_MONTRE
+data:
+  start: "2026-11-01 08:00:00"
+  end: "2026-11-01 18:00:00"
+response_variable: historique
+```
+
+Les heures de `get_position_history` sont en heure locale de Home Assistant. La réponse est indexée par identifiant de montre (`did`) et contient la liste `positions` (`latitude`, `longitude`, `timestamp`, `speed`, `datatype`).
 
 ### Programme Ne pas déranger
 
@@ -324,7 +472,7 @@ La carte affiche le niveau de batterie, le temps écoulé depuis la dernière po
 
 ## Mise à jour des données
 
-L'intégration interroge l'API toutes les **5 minutes**. Le bouton "Rafraîchir la position" envoie une commande asynchrone à la montre, puis relance une interrogation 20 secondes plus tard.
+L'intégration interroge l'API toutes les **5 minutes** (position, batterie, signal, alarmes). Les réglages (mode de fonctionnement, numéros SOS, Ne pas déranger, zones de sécurité, dernière photo) sont relus toutes les **30 minutes** et juste après une modification. Le bouton "Rafraîchir la position" envoie une commande asynchrone à la montre, puis relance une interrogation 20 secondes plus tard.
 
 ---
 

@@ -5,6 +5,7 @@ import json
 import logging
 import ssl
 from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urljoin
@@ -12,6 +13,10 @@ from urllib.parse import urljoin
 import aiohttp
 
 from .protocol import (
+    ALARM_FETCH_COUNT,
+    COMMAND_REQUEST_LOCATION,
+    COMMAND_SOS_NUMBERS,
+    COMMAND_WORK_MODE,
     DEFAULT_APP_ID,
     DEFAULT_CLIENT_FLAG,
     DEFAULT_CLIENT_VERSION,
@@ -20,23 +25,36 @@ from .protocol import (
     DEFAULT_SIGN_FLAG,
     DEVICE_OFFLINE_MESSAGE,
     DEVICE_OFFLINE_STATUS,
+    MAX_SOS_NUMBERS,
+    POSITION_HISTORY_DATE_FORMAT,
     REGIONS,
     SUCCESS_STATUSES,
+    WORK_MODES,
     DndPeriod,
+    PhotoWallItem,
+    SafeZone,
+    SaveFamilyAlarm,
     SaveFamilyAuthError,
     SaveFamilyConnectionError,
     SaveFamilyError,
     SaveFamilyResponseError,
+    SaveFamilySettings,
     SaveFamilyUpgradeRequiredError,
     SaveFamilyWatch,
     SaveFamilyWatchState,
     build_watch_index,
     build_watch_state,
     coerce_int,
+    command_sendurl,
     compute_sign,
     dnd_schedule_fields,
+    extract_alarms,
+    extract_latest_photo,
+    extract_position_history,
+    extract_safe_zones,
     hash_password,
     is_login_timeout_response,
+    photo_wall_filename,
     supports_dnd_schedule,
 )
 from .transport import (
@@ -119,6 +137,16 @@ class SaveFamilyApiClient:
             else:
                 states[did] = build_watch_state(watch, response, previous.get(did))
 
+            try:
+                signal = await self.async_find_gsm_signal(did)
+            except SaveFamilyAuthError:
+                raise
+            except SaveFamilyError as exc:
+                _LOGGER.debug("findDeviceGSMSignal failed for %s: %s", did, exc)
+                previous_state = previous.get(did)
+                signal = previous_state.signal if previous_state else None
+            states[did] = replace(states[did], signal=signal)
+
             state = states[did]
             if state.step_count is None and state.raw_position:
                 _LOGGER.debug(
@@ -130,18 +158,181 @@ class SaveFamilyApiClient:
         return states
 
     async def async_request_location(self, did: str) -> dict[str, Any]:
-        watch = await self._async_ensure_watch(did, require_model=True)
+        return await self.async_send_command(did, COMMAND_REQUEST_LOCATION, with_model=True)
+
+    async def async_send_command(
+        self,
+        did: str,
+        command: str,
+        *params: str,
+        with_model: bool = False,
+    ) -> dict[str, Any]:
+        """Send a v2_sendOrder command; the watch must be online to acknowledge it."""
+        watch = await self._async_ensure_watch(did, require_model=with_model)
         response = await self._async_send_order(
-            f"test?dev_id={watch.did}&com=D3&dev_model={watch.model}",
+            command_sendurl(watch.did, command, *params, model=watch.model if with_model else None)
         )
         if is_login_timeout_response(response):
             await self._async_reauthenticate()
-            watch = await self._async_ensure_watch(did, require_model=True)
+            watch = await self._async_ensure_watch(did, require_model=with_model)
             response = await self._async_send_order(
-                f"test?dev_id={watch.did}&com=D3&dev_model={watch.model}",
+                command_sendurl(watch.did, command, *params, model=watch.model if with_model else None)
             )
         self._ensure_command_success(response)
         return response
+
+    async def async_find_alarms(self, did: str) -> list[SaveFamilyAlarm]:
+        async def send(watch: SaveFamilyWatch) -> dict[str, Any]:
+            return await self._request_json(
+                "GET",
+                self._session_path("/S10APP/v2_findAlarmInfo"),
+                params=self._signed_params(
+                    {
+                        "language": self.language,
+                        "did": watch.did,
+                        "did_id": watch.did_id,
+                        "flag": 0,
+                        "count": ALARM_FETCH_COUNT,
+                        "createtime": "",
+                    }
+                ),
+            )
+
+        response = await self._async_watch_request(did, send)
+        # Status 2 ("No new data") is a valid empty result.
+        self._ensure_status(response, SUCCESS_STATUSES | {2})
+        return extract_alarms(response)
+
+    async def async_find_gsm_signal(self, did: str) -> int | None:
+        async def send(watch: SaveFamilyWatch) -> dict[str, Any]:
+            return await self._request_json(
+                "POST",
+                "/S10APP/findDeviceGSMSignal",
+                data=self._signed_params(
+                    {
+                        "sid": self.session_id,
+                        "language": self.language,
+                        "user_id": self.user_id,
+                        "did": watch.did,
+                    }
+                ),
+            )
+
+        response = await self._async_watch_request(did, send)
+        self._ensure_status(response, SUCCESS_STATUSES)
+        return coerce_int(response.get("signal"))
+
+    async def async_find_safe_zones(self, did: str) -> list[SafeZone]:
+        async def send(watch: SaveFamilyWatch) -> dict[str, Any]:
+            return await self._request_json(
+                "GET",
+                self._session_path("/S10APP/v2_new_findRailInfo"),
+                params=self._signed_params(
+                    {
+                        "language": self.language,
+                        "did_id": watch.did_id,
+                        "did": watch.did,
+                        "loginname": self.loginname,
+                    }
+                ),
+            )
+
+        response = await self._async_watch_request(did, send)
+        self._ensure_status(response, SUCCESS_STATUSES | {2})
+        return extract_safe_zones(response)
+
+    async def async_find_latest_photo(self, did: str) -> PhotoWallItem | None:
+        async def send(watch: SaveFamilyWatch) -> dict[str, Any]:
+            return await self._request_json(
+                "GET",
+                self._session_path("/S10APP/v2_findPictrueDoorInfo"),
+                params=self._signed_params(
+                    {
+                        "language": self.language,
+                        "did": watch.did,
+                        "max_id": 0,
+                    }
+                ),
+            )
+
+        response = await self._async_watch_request(did, send)
+        self._ensure_status(response, SUCCESS_STATUSES | {2})
+        return extract_latest_photo(response)
+
+    async def async_download_photo(self, did: str, filename: str) -> bytes:
+        watch = await self._async_ensure_watch(did)
+        return await self._request_bytes(
+            self._session_path("/S10APP/v2_downloadPictrueDoor"),
+            self._signed_params({"did": watch.did, "filename": photo_wall_filename(filename)}),
+        )
+
+    async def async_find_position_history(
+        self,
+        did: str,
+        start: datetime,
+        end: datetime,
+    ) -> list[dict[str, Any]]:
+        async def send(watch: SaveFamilyWatch) -> dict[str, Any]:
+            return await self._request_json(
+                "GET",
+                self._session_path("/S10APP/v2_findPositionRecordByOneday"),
+                params=self._signed_params(
+                    {
+                        "language": self.language,
+                        "did_id": watch.did_id,
+                        "did": watch.did,
+                        "ksdate": start.strftime(POSITION_HISTORY_DATE_FORMAT),
+                        "jsdate": end.strftime(POSITION_HISTORY_DATE_FORMAT),
+                        "checkWifiOpen": 1,
+                    }
+                ),
+            )
+
+        response = await self._async_watch_request(did, send)
+        self._ensure_status(response, SUCCESS_STATUSES | {2})
+        return extract_position_history(response)
+
+    async def async_set_work_mode(self, did: str, settings: SaveFamilySettings, mode: str) -> None:
+        """Apply on the watch (D1), then persist like WorkModeActivity does."""
+        interval = WORK_MODES[mode]
+        await self.async_send_command(did, COMMAND_WORK_MODE, str(interval), with_model=True)
+        await self._async_update_settings(did, settings, {"upinterval": interval})
+
+    async def async_set_sos_numbers(self, did: str, settings: SaveFamilySettings, numbers: Sequence[str]) -> None:
+        """Apply on the watch (D7), then persist like SOSActivity does."""
+        if len(numbers) > MAX_SOS_NUMBERS:
+            raise SaveFamilyError(f"at most {MAX_SOS_NUMBERS} SOS numbers are supported, got {len(numbers)}")
+        slots = [*numbers, *[""] * (MAX_SOS_NUMBERS - len(numbers))]
+        await self.async_send_command(did, COMMAND_SOS_NUMBERS, *slots)
+        await self._async_update_settings(
+            did,
+            settings,
+            {f"sosnumber{index}": number for index, number in enumerate(slots, start=1)},
+        )
+
+    async def _async_update_settings(
+        self,
+        did: str,
+        settings: SaveFamilySettings,
+        fields: dict[str, Any],
+    ) -> None:
+        async def send(watch: SaveFamilyWatch) -> dict[str, Any]:
+            return await self._request_json(
+                "GET",
+                self._session_path("/S10APP/v2_upSetInfo"),
+                params=self._signed_params(
+                    {
+                        "language": self.language,
+                        "did_id": watch.did_id,
+                        "did": watch.did,
+                        "id": settings.setting_id,
+                        **fields,
+                    }
+                ),
+            )
+
+        response = await self._async_watch_request(did, send)
+        self._ensure_status(response, SUCCESS_STATUSES)
 
     async def async_login(self) -> dict[str, Any]:
         payload = self._signed_params(
@@ -359,6 +550,42 @@ class SaveFamilyApiClient:
         params: dict[str, str] | None = None,
         data: dict[str, str] | None = None,
     ) -> dict[str, Any]:
+        raw, _ = await self._request_raw(method, path, params=params, data=data)
+        text = raw.decode("utf-8", "replace")
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise SaveFamilyResponseError(None, f"server did not return JSON: {text[:500]}", {}) from exc
+
+        if not isinstance(payload, dict):
+            raise SaveFamilyResponseError(None, "server returned a non-object JSON payload", {"payload": payload})
+        return decrypt_response(payload)
+
+    async def _request_bytes(self, path: str, params: dict[str, str]) -> bytes:
+        """GET a binary file; a JSON body means the server returned an error instead."""
+        raw, content_type = await self._request_raw("GET", path, params=params, accept="*/*")
+        if content_type != "application/json" and not raw.lstrip().startswith((b"{", b"[")):
+            return raw
+        try:
+            payload = json.loads(raw.decode("utf-8", "replace"))
+        except json.JSONDecodeError:
+            return raw
+        if isinstance(payload, dict):
+            payload = decrypt_response(payload)
+            status = coerce_int(payload.get("status", payload.get("code")))
+            message = str(payload.get("message", payload.get("msg", "unexpected JSON response")))
+            raise SaveFamilyResponseError(status, message, payload)
+        raise SaveFamilyResponseError(None, "server returned JSON instead of a file", {"payload": payload})
+
+    async def _request_raw(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, str] | None = None,
+        data: dict[str, str] | None = None,
+        accept: str = "application/json",
+    ) -> tuple[bytes, str]:
         url = urljoin(f"{self.region.base_url}/", path.lstrip("/"))
         if self.ssl_context is None:
             self.ssl_context = await asyncio.get_running_loop().run_in_executor(
@@ -386,30 +613,23 @@ class SaveFamilyApiClient:
                 params=request_params,
                 data=request_data,
                 headers={
-                    "Accept": "application/json",
+                    "Accept": accept,
                     "Content-Type": "application/json; charset=utf-8",
                     ENCRYPT_INDEX_HEADER: str(index),
                 },
                 timeout=aiohttp.ClientTimeout(total=self.request_timeout),
                 ssl=self.ssl_context,
             ) as response:
-                raw = await response.text()
+                raw = await response.read()
+                content_type = response.content_type
         except (aiohttp.ClientError, TimeoutError) as exc:
             raise SaveFamilyConnectionError(f"request to {url} failed: {exc}") from exc
 
         if response.status in {401, 403}:
-            raise SaveFamilyAuthError(f"HTTP {response.status}: {raw}")
+            raise SaveFamilyAuthError(f"HTTP {response.status}: {raw[:500].decode('utf-8', 'replace')}")
         if response.status >= 400:
-            raise SaveFamilyConnectionError(f"HTTP {response.status}: {raw}")
-
-        try:
-            payload = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise SaveFamilyResponseError(None, f"server did not return JSON: {raw[:500]}", {}) from exc
-
-        if not isinstance(payload, dict):
-            raise SaveFamilyResponseError(None, "server returned a non-object JSON payload", {"payload": payload})
-        return decrypt_response(payload)
+            raise SaveFamilyConnectionError(f"HTTP {response.status}: {raw[:500].decode('utf-8', 'replace')}")
+        return raw, content_type
 
     @staticmethod
     def _ensure_status(payload: dict[str, Any], allowed_statuses: set[int]) -> None:

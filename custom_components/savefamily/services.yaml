@@ -8,3 +8,41 @@ set_dnd_schedule:
       required: true
       selector:
         object:
+
+set_sos_numbers:
+  target:
+    entity:
+      integration: savefamily
+  fields:
+    numbers:
+      example: '["0612345678", "0698765432"]'
+      required: true
+      selector:
+        object:
+
+call_back:
+  target:
+    entity:
+      integration: savefamily
+  fields:
+    phone_number:
+      example: "0612345678"
+      required: true
+      selector:
+        text:
+          type: tel
+
+get_position_history:
+  target:
+    entity:
+      integration: savefamily
+  fields:
+    start:
+      example: "2026-11-01 08:00:00"
+      required: true
+      selector:
+        datetime:
+    end:
+      example: "2026-11-01 18:00:00"
+      selector:
+        datetime:

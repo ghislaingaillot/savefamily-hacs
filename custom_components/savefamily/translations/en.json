@@ -52,6 +52,15 @@
       },
       "dnd_schedule": {
         "name": "Do Not Disturb schedule"
+      },
+      "signal": {
+        "name": "GSM signal"
+      },
+      "sos_numbers": {
+        "name": "SOS numbers"
+      },
+      "safe_zones": {
+        "name": "Safe zones"
       }
     },
     "binary_sensor": {
@@ -65,6 +74,55 @@
     "button": {
       "request_location": {
         "name": "Refresh location"
+      },
+      "find_watch": {
+        "name": "Find watch"
+      },
+      "take_photo": {
+        "name": "Take photo"
+      },
+      "restart": {
+        "name": "Restart"
+      },
+      "power_off": {
+        "name": "Power off"
+      }
+    },
+    "select": {
+      "work_mode": {
+        "name": "Work mode",
+        "state": {
+          "realtime": "Real-time (1 min)",
+          "normal": "Normal (10 min)",
+          "power_saving": "Power saving (1 h)"
+        }
+      }
+    },
+    "image": {
+      "latest_photo": {
+        "name": "Latest photo"
+      }
+    },
+    "event": {
+      "alarm": {
+        "name": "Alarm",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "sos": "SOS",
+              "low_battery": "Low battery",
+              "geofence_exit": "Left safe zone",
+              "geofence_enter": "Entered safe zone",
+              "watch_removed": "Watch removed",
+              "fall": "Fall detected",
+              "home_school_arrival": "Arrived home/school",
+              "home_school_departure": "Left home/school",
+              "auth_code": "Authorization code",
+              "mode_change": "Mode change",
+              "other": "Other"
+            }
+          }
+        }
       }
     }
   },
@@ -76,6 +134,40 @@
         "periods": {
           "name": "Periods",
           "description": "Up to 4 schedule windows as START-END:DAYS, e.g. 08:00-15:00:mon,tue,wed,thu,fri. Times use the watch's local clock, with start before end. Pass [] to clear all slots."
+        }
+      }
+    },
+    "set_sos_numbers": {
+      "name": "Set SOS numbers",
+      "description": "Replace the SOS numbers of a watch (up to 5). Omitted slots are cleared; pass [] to clear them all.",
+      "fields": {
+        "numbers": {
+          "name": "Numbers",
+          "description": "Up to 5 phone numbers, e.g. [\"0612345678\"]."
+        }
+      }
+    },
+    "call_back": {
+      "name": "Call back (listen in)",
+      "description": "Ask the watch to silently call a phone number so you can hear its surroundings.",
+      "fields": {
+        "phone_number": {
+          "name": "Phone number",
+          "description": "Number the watch should call."
+        }
+      }
+    },
+    "get_position_history": {
+      "name": "Get position history",
+      "description": "Return the positions recorded by a watch over a period of at most 24 hours.",
+      "fields": {
+        "start": {
+          "name": "Start",
+          "description": "Start of the period (Home Assistant local time)."
+        },
+        "end": {
+          "name": "End",
+          "description": "End of the period; defaults to now."
         }
       }
     }
