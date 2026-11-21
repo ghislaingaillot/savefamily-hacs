@@ -98,19 +98,21 @@ Extra attributes: `did`, `did_id`, `model`, `address`, `speed_kmh`, `direction_d
 
 Event types: `sos`, `low_battery`, `geofence_exit`, `geofence_enter`, `watch_removed`, `fall`, `home_school_arrival`, `home_school_departure`, `auth_code`, `mode_change`, `other`. Attributes: `alarm_id`, `type_code`, `message`, `created`.
 
-Each alarm is also fired on the event bus as `savefamily_alarm` (data: `did`, `watch`, `alarm_id`, `type`, `type_code`, `message`, `created`). Alarms already present when Home Assistant starts are not replayed. Example automation:
+Each alarm is also fired on the event bus as `savefamily_alarm` (data: `did`, `watch`, `alarm_id`, `type`, `type_code`, `message`, `created`). Alarms already present when Home Assistant starts are not replayed. To act on an alarm, trigger on this bus event: it is fired exactly once per alarm. Example automation:
 
 ```yaml
 triggers:
-  - trigger: state
-    entity_id: event.<name>_alarm
-    attribute: event_type
-    to: sos
+  - trigger: event
+    event_type: savefamily_alarm
+    event_data:
+      type: sos
 actions:
   - action: notify.mobile_app_my_phone
     data:
-      message: "SOS triggered on the watch!"
+      message: "SOS triggered on {{ trigger.event.data.watch }}!"
 ```
+
+With several watches, add `did: "<did>"` under `event_data` (the `did` attribute of the watch's device tracker) to limit the automation to one watch. Avoid a `state` trigger on the `event_type` attribute of `event.<name>_alarm`: it does not fire for a second SOS in a row, since the attribute keeps the same value, and it fires again when the entity becomes available after an outage.
 
 ### Select
 
@@ -365,19 +367,21 @@ Attributs supplémentaires : `did`, `did_id`, `model`, `address`, `speed_kmh`, `
 
 Types d'événement : `sos`, `low_battery`, `geofence_exit`, `geofence_enter`, `watch_removed`, `fall`, `home_school_arrival`, `home_school_departure`, `auth_code`, `mode_change`, `other`. Attributs : `alarm_id`, `type_code`, `message`, `created`.
 
-Chaque alarme est aussi envoyée sur le bus d'événements sous `savefamily_alarm` (données : `did`, `watch`, `alarm_id`, `type`, `type_code`, `message`, `created`). Les alarmes déjà présentes au démarrage de Home Assistant ne sont pas rejouées. Exemple d'automatisation :
+Chaque alarme est aussi envoyée sur le bus d'événements sous `savefamily_alarm` (données : `did`, `watch`, `alarm_id`, `type`, `type_code`, `message`, `created`). Les alarmes déjà présentes au démarrage de Home Assistant ne sont pas rejouées. Pour réagir à une alarme, utilisez cet événement du bus comme déclencheur : il est envoyé une seule fois par alarme. Exemple d'automatisation :
 
 ```yaml
 triggers:
-  - trigger: state
-    entity_id: event.<nom>_alarme
-    attribute: event_type
-    to: sos
+  - trigger: event
+    event_type: savefamily_alarm
+    event_data:
+      type: sos
 actions:
   - action: notify.mobile_app_mon_telephone
     data:
-      message: "SOS déclenché sur la montre !"
+      message: "SOS déclenché sur {{ trigger.event.data.watch }} !"
 ```
+
+Avec plusieurs montres, ajoutez `did: "<did>"` sous `event_data` (l'attribut `did` du suivi de la montre) pour limiter l'automatisation à une seule montre. Évitez un déclencheur `state` sur l'attribut `event_type` de `event.<nom>_alarme` : il ne se déclenche pas pour un second SOS d'affilée, car l'attribut garde la même valeur, et il se déclenche de nouveau quand l'entité redevient disponible après une panne.
 
 ### Sélecteur (Select)
 
