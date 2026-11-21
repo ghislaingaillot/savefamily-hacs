@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -10,11 +12,11 @@ from pytest_homeassistant_custom_component.common import (
     async_mock_service,
 )
 
-from custom_components.savefamily.const import EVENT_ALARM
+from custom_components.savefamily.const import DOMAIN, EVENT_ALARM
 from custom_components.savefamily.core.protocol import SaveFamilyAuthError
 
 from .conftest import FakeApi
-from .test_init import _poll, _setup
+from .test_init import POLLS_BEFORE_REMOVAL, _poll, _setup
 
 
 async def test_readme_sos_automation_runs_once_per_sos(
@@ -70,3 +72,20 @@ async def test_alarms_are_not_lost_when_another_watch_fails(
     await _poll(hass, config_entry)
 
     assert [(event.data["did"], event.data["type"]) for event in events] == [("111", "sos")]
+
+
+async def test_alarm_of_a_watch_coming_back_reaches_its_entity(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory, api: FakeApi, config_entry: MockConfigEntry
+) -> None:
+    await _setup(hass, config_entry)
+    api.dids = ["111"]
+    await _poll(hass, config_entry, POLLS_BEFORE_REMOVAL, freezer)
+    assert er.async_get(hass).async_get_entity_id("event", DOMAIN, "222_alarm") is None
+
+    # The watch comes back with a SOS: its alarm entity, created by that poll, shows it.
+    api.dids = ["111", "222"]
+    api.add_alarm("222", "sos")
+    await _poll(hass, config_entry, freezer=freezer)
+
+    alarm = hass.states.get(er.async_get(hass).async_get_entity_id("event", DOMAIN, "222_alarm"))
+    assert alarm.attributes["event_type"] == "sos"

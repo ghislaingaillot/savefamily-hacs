@@ -46,8 +46,19 @@ class SaveFamilyAlarmEvent(SaveFamilyEntity, EventEntity):
         # Listeners also run on failed refreshes with the previous data; never replay an alarm.
         self._last_alarm_id = 0
 
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        # The poll that created this entity (a watch back, or taken over from another entry) may
+        # carry alarms that it did not receive.
+        self._async_trigger_new_alarms()
+
     @callback
     def _handle_coordinator_update(self) -> None:
+        self._async_trigger_new_alarms()
+        super()._handle_coordinator_update()
+
+    @callback
+    def _async_trigger_new_alarms(self) -> None:
         if self._did in self.coordinator.data:
             for alarm in self.snapshot.new_alarms:
                 if alarm.id <= self._last_alarm_id:
@@ -58,4 +69,3 @@ class SaveFamilyAlarmEvent(SaveFamilyEntity, EventEntity):
                 self._trigger_event(alarm.type, attributes)
                 # One state write per alarm, so several alarms in one poll all reach automations.
                 self.async_write_ha_state()
-        super()._handle_coordinator_update()

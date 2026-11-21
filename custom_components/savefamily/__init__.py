@@ -15,7 +15,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -34,6 +34,7 @@ from .const import (
     SERVICE_GET_POSITION_HISTORY,
     SERVICE_SET_DND_SCHEDULE,
     SERVICE_SET_SOS_NUMBERS,
+    SIGNAL_WATCH_HANDED_OVER,
     SIGNAL_WATCH_REMOVED,
     STALE_DEVICE_AFTER,
 )
@@ -161,13 +162,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: SaveFamilyConfigEntry) -
     settings_coordinator = SaveFamilySettingsCoordinator(hass, client, coordinator)
     await settings_coordinator.async_refresh()
 
+    @callback
+    def _async_handed_over(did: str) -> None:
+        coordinator.async_hand_over_watch(did)
+        settings_coordinator.async_forget_watch(did)
+
+    entry.async_on_unload(
+        async_dispatcher_connect(hass, SIGNAL_WATCH_HANDED_OVER.format(entry.entry_id), _async_handed_over)
+    )
+    entry.async_on_unload(
+        async_dispatcher_connect(
+            hass, SIGNAL_WATCH_REMOVED.format(entry.entry_id), settings_coordinator.async_forget_watch
+        )
+    )
+
     # Since when each device's watch has been missing from every successful poll.
     missing_since: dict[str, datetime] = {}
 
     @callback
     def _async_cleanup_devices() -> None:
         if not coordinator.last_update_success:
-            # A failed poll keeps the previous data and says nothing about the account.
+            # A failed poll keeps the previous data and says nothing about the account: a missing
+            # watch must then be missing from successful polls for STALE_DEVICE_AFTER again.
+            missing_since.clear()
             return
         device_reg = dr.async_get(hass)
         devices = dr.async_entries_for_config_entry(device_reg, entry.entry_id)

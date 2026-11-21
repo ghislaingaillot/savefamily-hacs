@@ -1,21 +1,30 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from dataclasses import replace
+from datetime import datetime
 
 from homeassistant.components import persistent_notification
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .const import (
+    DATA_LAST_ALARM_IDS,
     DATA_WATCH_OWNERS,
     DOMAIN,
     EVENT_ALARM,
     POLL_INTERVAL,
     REQUEST_LOCATION_REFRESH_DELAY,
     SETTINGS_POLL_INTERVAL,
+    SIGNAL_WATCH_HANDED_OVER,
+    STALE_DEVICE_AFTER,
 )
 from .core.async_client import SaveFamilyApiClient
 from .core.protocol import (
@@ -67,12 +76,29 @@ class SaveFamilyDataUpdateCoordinator(_DelayedRefreshMixin, DataUpdateCoordinato
             update_interval=POLL_INTERVAL,
         )
         self.client = client
-        # Highest alarm id seen per watch; alarms present at the first poll are not replayed.
-        self._last_alarm_id: dict[str, int] = {}
+        # When a successful poll last listed each watch this entry handles.
+        self.last_shown: dict[str, datetime] = {}
+
+    # A watch listed by several accounts (two parents) is handled by one entry at a time:
+    # its entities, alarms and settings belong to that entry only.
+
+    @property
+    def _owners(self) -> dict[str, str]:
+        """Entry id handling each watch, shared by all entries."""
+        return self.hass.data.setdefault(DATA_WATCH_OWNERS, {})
+
+    @property
+    def _last_alarm_ids(self) -> dict[str, int]:
+        """Highest alarm id seen per watch, shared so that it follows a watch to another entry."""
+        return self.hass.data.setdefault(DATA_LAST_ALARM_IDS, {})
 
     async def _async_update_data(self) -> dict[str, SaveFamilyWatchState]:
+        entry_id = self.config_entry.entry_id
         try:
-            states = self._async_keep_own_watches(await self.client.async_refresh_watch_states(self.data))
+            # Listed by the account but handled by another entry: not read.
+            others = {did for did, owner in self._owners.items() if owner != entry_id}
+            listed = await self.client.async_refresh_watch_states(self.data, skip=others)
+            states = {did: state for did, state in listed.items() if did not in others and self._async_may_handle(did)}
             last_alarm_ids: dict[str, int | None] = {}
             for did, state in states.items():
                 new_alarms, last_alarm_ids[did] = await self._async_new_alarms(did)
@@ -84,8 +110,19 @@ class SaveFamilyDataUpdateCoordinator(_DelayedRefreshMixin, DataUpdateCoordinato
         except SaveFamilyError as exc:
             raise UpdateFailed(str(exc)) from exc
 
-        # Only once every watch was read: after an error, the next poll finds these alarms again.
-        self._last_alarm_id.update({did: last for did, last in last_alarm_ids.items() if last is not None})
+        # Claim the watches and store the alarms seen only now that every read succeeded: after an
+        # error, the next poll finds these alarms again.
+        now = dt_util.utcnow()
+        for did in list(states):
+            if self._owners.setdefault(did, entry_id) != entry_id:
+                # Claimed by another entry while this poll was running.
+                del states[did]
+                continue
+            self.last_shown[did] = now
+            if (last_alarm_id := last_alarm_ids[did]) is not None:
+                self._last_alarm_ids[did] = last_alarm_id
+        self._async_take_over_stale_watches(listed.keys() - states.keys(), now)
+
         for did, state in states.items():
             for alarm in state.new_alarms:
                 self.hass.bus.async_fire(
@@ -95,19 +132,52 @@ class SaveFamilyDataUpdateCoordinator(_DelayedRefreshMixin, DataUpdateCoordinato
         return states
 
     @callback
-    def _async_keep_own_watches(self, states: dict[str, SaveFamilyWatchState]) -> dict[str, SaveFamilyWatchState]:
-        """Leave out the watches another entry (a second parent account) already handles."""
-        owners: dict[str, str] = self.hass.data.setdefault(DATA_WATCH_OWNERS, {})
-        entry_id = self.config_entry.entry_id
-        return {did: state for did, state in states.items() if owners.setdefault(did, entry_id) == entry_id}
+    def _async_may_handle(self, did: str) -> bool:
+        owner = self._owners.get(did)
+        if owner is not None:
+            return owner == self.config_entry.entry_id
+        # After a restart, leave the watch to the entry that had it while that entry is starting.
+        registry = er.async_get(self.hass)
+        entity_id = registry.async_get_entity_id("device_tracker", DOMAIN, f"{did}_location")
+        previous_id = registry.async_get(entity_id).config_entry_id if entity_id else None
+        if previous_id in (None, self.config_entry.entry_id):
+            return True
+        previous = self.hass.config_entries.async_get_entry(previous_id)
+        return previous is None or previous.state is not ConfigEntryState.SETUP_IN_PROGRESS
+
+    @callback
+    def _async_take_over_stale_watches(self, dids: Iterable[str], now: datetime) -> None:
+        """Take over the watches listed here that their entry has not shown for STALE_DEVICE_AFTER.
+
+        That entry failed, needs a new login, or its account no longer lists the watch.
+        """
+        for did in dids:
+            owner = self._owners.get(did)
+            if owner is None or owner == self.config_entry.entry_id:
+                continue
+            entry = self.hass.config_entries.async_get_entry(owner)
+            if entry is not None and entry.state is ConfigEntryState.LOADED:
+                shown = entry.runtime_data.coordinator.last_shown.get(did)
+                if shown is not None and now - shown < STALE_DEVICE_AFTER:
+                    continue
+            # That entry removes its entities, keeping their registry entries for this one, which
+            # claims the watch at its next poll.
+            del self._owners[did]
+            async_dispatcher_send(self.hass, SIGNAL_WATCH_HANDED_OVER.format(owner), did)
 
     @callback
     def async_release_watches(self, keep: set[str] | frozenset[str] = frozenset()) -> None:
         """Let other entries take over the watches of this entry, except those in keep."""
-        owners: dict[str, str] = self.hass.data.get(DATA_WATCH_OWNERS, {})
         entry_id = self.config_entry.entry_id
-        for did in [did for did, owner in owners.items() if owner == entry_id and did not in keep]:
-            del owners[did]
+        for did in [did for did, owner in self._owners.items() if owner == entry_id and did not in keep]:
+            del self._owners[did]
+
+    @callback
+    def async_hand_over_watch(self, did: str) -> None:
+        """Forget a watch another entry has taken over."""
+        self.last_shown.pop(did, None)
+        if self.data:
+            self.data.pop(did, None)
 
     async def _async_new_alarms(self, did: str) -> tuple[list[SaveFamilyAlarm], int | None]:
         """New alarms of the watch, and the highest alarm id now seen (None leaves it unchanged)."""
@@ -120,9 +190,10 @@ class SaveFamilyDataUpdateCoordinator(_DelayedRefreshMixin, DataUpdateCoordinato
             return [], None
 
         newest = max((alarm.id for alarm in alarms), default=0)
-        if did not in self._last_alarm_id:
+        if did not in self._last_alarm_ids:
+            # Alarms already there when Home Assistant starts are not replayed.
             return [], newest
-        last_seen = self._last_alarm_id[did]
+        last_seen = self._last_alarm_ids[did]
         return [alarm for alarm in alarms if alarm.id > last_seen], max(last_seen, newest)
 
     async def async_request_location(self, did: str) -> None:
@@ -179,7 +250,8 @@ class SaveFamilySettingsCoordinator(_DelayedRefreshMixin, DataUpdateCoordinator[
     async def _async_update_data(self) -> dict[str, SaveFamilyWatchSettings]:
         previous = self.data or {}
         watches = self._main_coordinator.data or {}
-        # Keep the settings of a watch missing from the last poll: it is usually back at the next one.
+        # Keep the settings of a watch missing from the last poll: it is usually back at the next
+        # one. They are dropped once its device is removed or another entry takes it over.
         results = {did: settings for did, settings in previous.items() if did not in watches}
         for did in watches:
             old = previous.get(did) or SaveFamilyWatchSettings()
@@ -195,6 +267,11 @@ class SaveFamilySettingsCoordinator(_DelayedRefreshMixin, DataUpdateCoordinator[
                 ),
             )
         return results
+
+    @callback
+    def async_forget_watch(self, did: str) -> None:
+        if self.data:
+            self.data.pop(did, None)
 
     async def _async_find_settings(self, did: str):
         return extract_settings(await self.client.async_find_set_info(did))

@@ -7,7 +7,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, MANUFACTURER, SIGNAL_WATCH_REMOVED
+from .const import DOMAIN, MANUFACTURER, SIGNAL_WATCH_HANDED_OVER, SIGNAL_WATCH_REMOVED
 from .coordinator import SaveFamilyDataUpdateCoordinator, SaveFamilySettingsCoordinator
 from .core.protocol import SaveFamilyWatch, SaveFamilyWatchSettings
 
@@ -17,13 +17,28 @@ if TYPE_CHECKING:
 
 @callback
 def async_forget_removed_watches(hass: HomeAssistant, entry: ConfigEntry, entities_by_did: dict[str, Any]) -> None:
-    """Let a platform add a watch's entities again if the watch comes back after its device was removed."""
+    """Let a platform add a watch's entities again if it comes back after its device was removed.
+
+    When another entry takes the watch over, also remove its entities but keep their registry
+    entries, so that they move to that entry with their entity ids and settings.
+    """
 
     @callback
     def _async_forget(did: str) -> None:
+        # The registry removes the entities of a removed device.
         entities_by_did.pop(did, None)
 
+    @callback
+    def _async_hand_over(did: str) -> None:
+        entities = entities_by_did.pop(did, None)
+        for entity in entities if isinstance(entities, list) else [entities]:
+            if entity is not None and entity.hass is not None:
+                hass.async_create_task(entity.async_remove())
+
     entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_WATCH_REMOVED.format(entry.entry_id), _async_forget))
+    entry.async_on_unload(
+        async_dispatcher_connect(hass, SIGNAL_WATCH_HANDED_OVER.format(entry.entry_id), _async_hand_over)
+    )
 
 
 class SaveFamilyEntity(CoordinatorEntity[SaveFamilyDataUpdateCoordinator]):

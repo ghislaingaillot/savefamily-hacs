@@ -66,6 +66,8 @@ Click the button above, then **Download** in HACS, then restart Home Assistant.
 
 > **Connection issue?** If you get an "Invalid authentication" error, see the [Troubleshooting](#troubleshooting) section.
 
+You can add several accounts, for example one per parent. A watch listed by several of them gets a single set of entities, handled by one account at a time. Another account takes the watch over, with the same entities, when that account's entry is unloaded, or has failed or no longer listed the watch for 15 minutes.
+
 ---
 
 ## Available entities
@@ -336,6 +338,8 @@ Cliquez sur le bouton ci-dessus, puis sur **Télécharger** dans HACS, puis red�
 | **App ID** *(avancé)* | Identifiant d'application — laisser la valeur par défaut |
 
 > **Problème de connexion ?** Si vous obtenez une erreur "Authentification invalide", voir la section [Dépannage](#dépannage).
+
+Vous pouvez ajouter plusieurs comptes, par exemple un par parent. Une montre listée par plusieurs d'entre eux n'a qu'un seul jeu d'entités, géré par un compte à la fois. Un autre compte reprend la montre, avec les mêmes entités, quand l'entrée de ce compte est déchargée, ou est en échec ou ne liste plus la montre depuis 15 minutes.
 
 ---
 
