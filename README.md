@@ -23,6 +23,8 @@ Find this integration useful? You can support its development:
 
 ## Installation
 
+Home Assistant 2024.5 or later is required. The YAML examples in this README use the syntax of Home Assistant 2024.10 and later. On an earlier version, rename `triggers:` and `actions:` to `trigger:` and `action:`, `trigger:` to `platform:` inside each trigger, and `action:` to `service:` inside each step.
+
 ### Via HACS (recommended)
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=ghislaingaillot&repository=savefamily-hacs&category=integration)
@@ -291,6 +293,8 @@ Cette intégration vous est utile ? Vous pouvez soutenir son développement :
 ---
 
 ## Installation
+
+Home Assistant 2024.5 ou plus récent est nécessaire. Les exemples YAML de ce README utilisent la syntaxe de Home Assistant 2024.10 et suivantes. Sur une version antérieure, renommez `triggers:` et `actions:` en `trigger:` et `action:`, `trigger:` en `platform:` dans chaque déclencheur, et `action:` en `service:` dans chaque étape.
 
 ### Via HACS (recommandé)
 
