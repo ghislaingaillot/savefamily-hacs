@@ -8,7 +8,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import SaveFamilyConfigEntry
 from .core.protocol import WORK_MODES, SaveFamilyError
-from .entity import SaveFamilySettingsEntity
+from .entity import SaveFamilySettingsEntity, async_forget_removed_watches
 
 
 async def async_setup_entry(
@@ -19,6 +19,7 @@ async def async_setup_entry(
     coordinator = entry.runtime_data.coordinator
     settings_coordinator = entry.runtime_data.settings_coordinator
     entities_by_did: dict[str, SaveFamilyWorkModeSelect] = {}
+    async_forget_removed_watches(hass, entry, entities_by_did)
 
     @callback
     def _async_handle_update() -> None:

@@ -1,0 +1,4 @@
+# Home Assistant 2024.5.0, the minimum version in hacs.json.
+pytest-homeassistant-custom-component==0.13.120
+# pycares 5 starts a thread that the Home Assistant test plugin of 2024.5 reports as lingering.
+pycares==4.4.0

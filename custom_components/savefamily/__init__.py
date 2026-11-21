@@ -15,6 +15,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -33,6 +34,8 @@ from .const import (
     SERVICE_GET_POSITION_HISTORY,
     SERVICE_SET_DND_SCHEDULE,
     SERVICE_SET_SOS_NUMBERS,
+    SIGNAL_WATCH_REMOVED,
+    STALE_DEVICE_POLLS,
 )
 from .core.protocol import (
     COMMAND_CALL_BACK,
@@ -156,14 +159,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: SaveFamilyConfigEntry) -
     settings_coordinator = SaveFamilySettingsCoordinator(hass, client, coordinator)
     await settings_coordinator.async_refresh()
 
+    # Successful polls in a row that did not list each device's watch.
+    missed_polls: dict[str, int] = {}
+
     @callback
     def _async_cleanup_devices() -> None:
+        if not coordinator.last_update_success:
+            # A failed poll keeps the previous data and says nothing about the account.
+            return
         device_reg = dr.async_get(hass)
         known_dids = set(coordinator.data)
         for device in dr.async_entries_for_config_entry(device_reg, entry.entry_id):
             dids = {ident for domain, ident in device.identifiers if domain == DOMAIN}
-            if dids and dids.isdisjoint(known_dids):
-                device_reg.async_remove_device(device.id)
+            if not dids or not dids.isdisjoint(known_dids):
+                missed_polls.pop(device.id, None)
+                continue
+            # The server sometimes leaves a watch out of a single poll.
+            missed_polls[device.id] = missed_polls.get(device.id, 0) + 1
+            if missed_polls[device.id] < STALE_DEVICE_POLLS:
+                continue
+            del missed_polls[device.id]
+            # Removes only this entry's link: another entry (second parent account) may share the watch.
+            device_reg.async_update_device(device.id, remove_config_entry_id=entry.entry_id)
+            _async_forget_watches(hass, entry, dids)
 
     _async_cleanup_devices()
     entry.async_on_unload(coordinator.async_add_listener(_async_cleanup_devices))
@@ -197,7 +215,17 @@ async def async_remove_config_entry_device(
 ) -> bool:
     coordinator = config_entry.runtime_data.coordinator
     known = {(DOMAIN, did) for did in coordinator.data}
-    return not any(ident in known for ident in device_entry.identifiers)
+    if any(ident in known for ident in device_entry.identifiers):
+        return False
+    _async_forget_watches(hass, config_entry, {ident for domain, ident in device_entry.identifiers if domain == DOMAIN})
+    return True
+
+
+@callback
+def _async_forget_watches(hass: HomeAssistant, entry: SaveFamilyConfigEntry, dids: set[str]) -> None:
+    """Tell the platforms to create the entities of these watches again if they come back."""
+    for did in dids:
+        async_dispatcher_send(hass, SIGNAL_WATCH_REMOVED.format(entry.entry_id), did)
 
 
 def _async_extract_target(hass: HomeAssistant, call: ServiceCall) -> tuple[set[str], set[str]]:

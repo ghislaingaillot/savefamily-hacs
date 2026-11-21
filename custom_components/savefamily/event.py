@@ -6,7 +6,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import SaveFamilyConfigEntry
 from .core.protocol import ALARM_TYPE_OTHER, ALARM_TYPES
-from .entity import SaveFamilyEntity
+from .entity import SaveFamilyEntity, async_forget_removed_watches
 
 
 async def async_setup_entry(
@@ -16,6 +16,7 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data.coordinator
     entities_by_did: dict[str, SaveFamilyAlarmEvent] = {}
+    async_forget_removed_watches(hass, entry, entities_by_did)
 
     @callback
     def _async_handle_update() -> None:

@@ -22,8 +22,12 @@ ATTR_START = "start"
 ATTR_END = "end"
 
 EVENT_ALARM = f"{DOMAIN}_alarm"
+# Sent with a watch's did once its device is removed, formatted with the entry id.
+SIGNAL_WATCH_REMOVED = f"{DOMAIN}_{{}}_watch_removed"
 
 POLL_INTERVAL = timedelta(minutes=5)
+# A watch missing from this many successful polls in a row has left the account.
+STALE_DEVICE_POLLS = 3
 LOCATION_STALE_AFTER = timedelta(minutes=30)
 ONLINE_THRESHOLD = timedelta(minutes=15)
 REQUEST_LOCATION_REFRESH_DELAY = 20
