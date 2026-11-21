@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import ssl
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Collection, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
@@ -103,7 +103,9 @@ class SaveFamilyApiClient:
     async def async_refresh_watch_states(
         self,
         previous: dict[str, SaveFamilyWatchState] | None = None,
+        skip: Collection[str] = (),
     ) -> dict[str, SaveFamilyWatchState]:
+        """State of every watch of the account; those in skip are listed but not read."""
         login_payload = await self.async_login()
         watches = build_watch_index(login_payload, self.user_id)
         if self.user_id is not None:
@@ -122,6 +124,9 @@ class SaveFamilyApiClient:
         previous = previous or {}
         states: dict[str, SaveFamilyWatchState] = {}
         for did, watch in watches.items():
+            if did in skip:
+                states[did] = SaveFamilyWatchState(watch=watch)
+                continue
             try:
                 response = await self.async_find_last_position(watch)
             except SaveFamilyAuthError:

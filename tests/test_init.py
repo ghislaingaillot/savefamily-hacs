@@ -137,11 +137,12 @@ async def test_failed_polls_do_not_count_as_missing(
 ) -> None:
     await _setup(hass, config_entry)
 
-    # The watch is listed again by the only successful poll of the period.
+    # Missing once, then an outage longer than the delay, then missing once more.
+    api.dids = ["111"]
+    await _poll(hass, config_entry, freezer=freezer)
     api.fail = True
     await _poll(hass, config_entry, POLLS_BEFORE_REMOVAL, freezer)
     api.fail = False
-    api.dids = ["111"]
     await _poll(hass, config_entry, freezer=freezer)
 
     assert _device(hass, "222") is not None
@@ -226,3 +227,16 @@ async def test_settings_of_a_watch_missing_from_a_poll_are_kept(
     await settings_coordinator.async_refresh()
 
     assert "222" in settings_coordinator.data
+
+
+async def test_settings_of_a_removed_watch_are_dropped(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory, api: FakeApi, config_entry: MockConfigEntry
+) -> None:
+    await _setup(hass, config_entry)
+    settings_coordinator = config_entry.runtime_data.settings_coordinator
+
+    api.dids = ["111"]
+    await _poll(hass, config_entry, POLLS_BEFORE_REMOVAL, freezer)
+    await settings_coordinator.async_refresh()
+
+    assert set(settings_coordinator.data) == {"111"}

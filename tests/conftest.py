@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Collection, Generator
 from typing import Any
 from unittest.mock import patch
 
@@ -35,6 +35,9 @@ class FakeApi:
         self.alarms: dict[str, list[SaveFamilyAlarm]] = {}
         self.alarm_errors: dict[str, SaveFamilyError] = {}
         self.fail = False
+        self.failing_accounts: set[str] = set()
+        # (login name, did) of each position read.
+        self.reads: list[tuple[str, str]] = []
 
     def add_alarm(self, did: str, alarm_type: str) -> None:
         alarms = self.alarms.setdefault(did, [])
@@ -50,19 +53,19 @@ class FakeSaveFamilyClient:
         self._loginname = loginname
 
     async def async_refresh_watch_states(
-        self, previous: dict[str, SaveFamilyWatchState] | None = None
+        self, previous: dict[str, SaveFamilyWatchState] | None = None, skip: Collection[str] = ()
     ) -> dict[str, SaveFamilyWatchState]:
-        if self._api.fail:
+        if self._api.fail or self._loginname in self._api.failing_accounts:
             raise SaveFamilyError("server unreachable")
-        return {
-            did: SaveFamilyWatchState(
-                watch=SaveFamilyWatch(did=did, did_id=f"id{did}", model="g36", nickname=f"Watch {did}", rolename=""),
-                latitude=48.85,
-                longitude=2.35,
-                battery=80,
-            )
-            for did in self._api.accounts.get(self._loginname, self._api.dids)
-        }
+        states = {}
+        for did in self._api.accounts.get(self._loginname, self._api.dids):
+            watch = SaveFamilyWatch(did=did, did_id=f"id{did}", model="g36", nickname=f"Watch {did}", rolename="")
+            if did in skip:
+                states[did] = SaveFamilyWatchState(watch=watch)
+                continue
+            self._api.reads.append((self._loginname, did))
+            states[did] = SaveFamilyWatchState(watch=watch, latitude=48.85, longitude=2.35, battery=80)
+        return states
 
     async def async_find_alarms(self, did: str) -> list[SaveFamilyAlarm]:
         if did in self._api.alarm_errors:

@@ -24,8 +24,12 @@ ATTR_END = "end"
 EVENT_ALARM = f"{DOMAIN}_alarm"
 # Sent with a watch's did once its device is removed, formatted with the entry id.
 SIGNAL_WATCH_REMOVED = f"{DOMAIN}_{{}}_watch_removed"
-# hass.data key: did -> id of the entry that handles the watch, when several accounts list it.
+# Sent with a watch's did when another entry takes it over, formatted with the entry id.
+SIGNAL_WATCH_HANDED_OVER = f"{DOMAIN}_{{}}_watch_handed_over"
+# hass.data keys, shared by all entries: did -> id of the entry that handles the watch, when
+# several accounts list it, and did -> highest alarm id seen.
 DATA_WATCH_OWNERS = f"{DOMAIN}_watch_owners"
+DATA_LAST_ALARM_IDS = f"{DOMAIN}_last_alarm_ids"
 
 POLL_INTERVAL = timedelta(minutes=5)
 # A watch missing from every successful poll for this long has left the account.
