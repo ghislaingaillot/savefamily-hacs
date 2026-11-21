@@ -9,7 +9,7 @@ from homeassistant.util import dt as dt_util
 
 from . import SaveFamilyConfigEntry
 from .core.protocol import PhotoWallItem, SaveFamilyError, SaveFamilyWatch
-from .entity import SaveFamilySettingsEntity
+from .entity import SaveFamilySettingsEntity, async_forget_removed_watches
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,6 +22,7 @@ async def async_setup_entry(
     coordinator = entry.runtime_data.coordinator
     settings_coordinator = entry.runtime_data.settings_coordinator
     entities_by_did: dict[str, SaveFamilyLatestPhotoImage] = {}
+    async_forget_removed_watches(hass, entry, entities_by_did)
 
     @callback
     def _async_handle_update() -> None:

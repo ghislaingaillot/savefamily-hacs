@@ -7,7 +7,7 @@ from homeassistant.util import dt as dt_util
 
 from . import SaveFamilyConfigEntry
 from .const import LOCATION_STALE_AFTER, ONLINE_THRESHOLD
-from .entity import SaveFamilyEntity
+from .entity import SaveFamilyEntity, async_forget_removed_watches
 
 
 async def async_setup_entry(
@@ -17,6 +17,7 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data.coordinator
     entities_by_did: dict[str, list[SaveFamilyEntity]] = {}
+    async_forget_removed_watches(hass, entry, entities_by_did)
 
     @callback
     def _async_handle_update() -> None:

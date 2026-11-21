@@ -9,7 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import SaveFamilyConfigEntry
 from .core.protocol import supports_dnd_schedule
-from .entity import SaveFamilyEntity, SaveFamilySettingsEntity
+from .entity import SaveFamilyEntity, SaveFamilySettingsEntity, async_forget_removed_watches
 
 
 async def async_setup_entry(
@@ -20,6 +20,7 @@ async def async_setup_entry(
     coordinator = entry.runtime_data.coordinator
     settings_coordinator = entry.runtime_data.settings_coordinator
     entities_by_did: dict[str, list[SensorEntity]] = {}
+    async_forget_removed_watches(hass, entry, entities_by_did)
 
     @callback
     def _async_handle_update() -> None:

@@ -1,11 +1,29 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, MANUFACTURER
+from .const import DOMAIN, MANUFACTURER, SIGNAL_WATCH_REMOVED
 from .coordinator import SaveFamilyDataUpdateCoordinator, SaveFamilySettingsCoordinator
 from .core.protocol import SaveFamilyWatch, SaveFamilyWatchSettings
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+
+
+@callback
+def async_forget_removed_watches(hass: HomeAssistant, entry: ConfigEntry, entities_by_did: dict[str, Any]) -> None:
+    """Let a platform add a watch's entities again if the watch comes back after its device was removed."""
+
+    @callback
+    def _async_forget(did: str) -> None:
+        entities_by_did.pop(did, None)
+
+    entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_WATCH_REMOVED.format(entry.entry_id), _async_forget))
 
 
 class SaveFamilyEntity(CoordinatorEntity[SaveFamilyDataUpdateCoordinator]):

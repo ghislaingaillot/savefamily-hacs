@@ -18,7 +18,7 @@ from .core.protocol import (
     COMMAND_TAKE_PHOTO,
     SaveFamilyError,
 )
-from .entity import SaveFamilyEntity
+from .entity import SaveFamilyEntity, async_forget_removed_watches
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -73,6 +73,7 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data.coordinator
     entities_by_did: dict[str, list[ButtonEntity]] = {}
+    async_forget_removed_watches(hass, entry, entities_by_did)
 
     @callback
     def _async_handle_update() -> None:
