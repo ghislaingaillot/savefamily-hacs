@@ -98,7 +98,7 @@ Extra attributes: `did`, `did_id`, `model`, `address`, `speed_kmh`, `direction_d
 
 Event types: `sos`, `low_battery`, `geofence_exit`, `geofence_enter`, `watch_removed`, `fall`, `home_school_arrival`, `home_school_departure`, `auth_code`, `mode_change`, `other`. Attributes: `alarm_id`, `type_code`, `message`, `created`.
 
-Each alarm is also fired on the event bus as `savefamily_alarm` (data: `did`, `watch`, `alarm_id`, `type`, `type_code`, `message`, `created`). Alarms already present when Home Assistant starts are not replayed. To act on an alarm, trigger on this bus event: it is fired exactly once per alarm. Example automation:
+Each alarm is also fired on the event bus as `savefamily_alarm` (data: `did`, `watch`, `alarm_id`, `type`, `type_code`, `message`, `created`). Alarms already present when Home Assistant starts are not replayed. To act on an alarm, trigger on this bus event: unlike the state of the alarm entity, it is fired for every new alarm. Example automation:
 
 ```yaml
 triggers:
@@ -367,7 +367,7 @@ Attributs supplémentaires : `did`, `did_id`, `model`, `address`, `speed_kmh`, `
 
 Types d'événement : `sos`, `low_battery`, `geofence_exit`, `geofence_enter`, `watch_removed`, `fall`, `home_school_arrival`, `home_school_departure`, `auth_code`, `mode_change`, `other`. Attributs : `alarm_id`, `type_code`, `message`, `created`.
 
-Chaque alarme est aussi envoyée sur le bus d'événements sous `savefamily_alarm` (données : `did`, `watch`, `alarm_id`, `type`, `type_code`, `message`, `created`). Les alarmes déjà présentes au démarrage de Home Assistant ne sont pas rejouées. Pour réagir à une alarme, utilisez cet événement du bus comme déclencheur : il est envoyé une seule fois par alarme. Exemple d'automatisation :
+Chaque alarme est aussi envoyée sur le bus d'événements sous `savefamily_alarm` (données : `did`, `watch`, `alarm_id`, `type`, `type_code`, `message`, `created`). Les alarmes déjà présentes au démarrage de Home Assistant ne sont pas rejouées. Pour réagir à une alarme, utilisez cet événement du bus comme déclencheur : contrairement à l'état de l'entité d'alarme, il est envoyé pour chaque nouvelle alarme. Exemple d'automatisation :
 
 ```yaml
 triggers:

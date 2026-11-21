@@ -158,8 +158,10 @@ class SaveFamilySettingsCoordinator(_DelayedRefreshMixin, DataUpdateCoordinator[
 
     async def _async_update_data(self) -> dict[str, SaveFamilyWatchSettings]:
         previous = self.data or {}
-        results: dict[str, SaveFamilyWatchSettings] = {}
-        for did in self._main_coordinator.data or {}:
+        watches = self._main_coordinator.data or {}
+        # Keep the settings of a watch missing from the last poll: it is usually back at the next one.
+        results = {did: settings for did, settings in previous.items() if did not in watches}
+        for did in watches:
             old = previous.get(did) or SaveFamilyWatchSettings()
             results[did] = SaveFamilyWatchSettings(
                 settings=await self._async_fetch(
