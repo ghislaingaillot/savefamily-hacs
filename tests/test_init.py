@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from homeassistant.config_entries import ConfigEntryDisabler
+from freezegun.api import FrozenDateTimeFactory
+from homeassistant.config_entries import ConfigEntryDisabler, ConfigEntryState
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
@@ -11,9 +12,16 @@ from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
-from custom_components.savefamily.const import DOMAIN, STALE_DEVICE_POLLS
+from custom_components.savefamily.const import (
+    DOMAIN,
+    POLL_INTERVAL,
+    STALE_DEVICE_AFTER,
+)
 
 from .conftest import FakeApi
+
+# Scheduled polls, the first one included, before a missing watch's device is removed.
+POLLS_BEFORE_REMOVAL = STALE_DEVICE_AFTER // POLL_INTERVAL + 1
 
 
 async def _setup(hass: HomeAssistant, entry: MockConfigEntry) -> None:
@@ -22,8 +30,16 @@ async def _setup(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     await hass.async_block_till_done()
 
 
-async def _poll(hass: HomeAssistant, entry: MockConfigEntry, times: int = 1) -> None:
+async def _poll(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    times: int = 1,
+    freezer: FrozenDateTimeFactory | None = None,
+) -> None:
+    """Refresh now, or every POLL_INTERVAL when a freezer is given."""
     for _ in range(times):
+        if freezer is not None:
+            freezer.tick(POLL_INTERVAL)
         await entry.runtime_data.coordinator.async_refresh()
         await hass.async_block_till_done()
 
@@ -46,8 +62,23 @@ def _battery_state(hass: HomeAssistant, did: str) -> str | None:
     return state.state if state else None
 
 
-async def test_watch_missing_from_a_few_polls_keeps_its_entities(
-    hass: HomeAssistant, api: FakeApi, config_entry: MockConfigEntry
+async def _remove_device(hass: HomeAssistant, hass_ws_client: WebSocketGenerator, entry: MockConfigEntry, did: str) -> bool:
+    """Remove the watch's device as the user does from the device page."""
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id(
+        {
+            "type": "config/device_registry/remove_config_entry",
+            "config_entry_id": entry.entry_id,
+            "device_id": _device(hass, did).id,
+        }
+    )
+    response = await client.receive_json()
+    await hass.async_block_till_done()
+    return response["success"]
+
+
+async def test_watch_missing_for_a_while_keeps_its_entities(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory, api: FakeApi, config_entry: MockConfigEntry
 ) -> None:
     await _setup(hass, config_entry)
     before = _unique_ids(hass, config_entry, "222")
@@ -55,26 +86,38 @@ async def test_watch_missing_from_a_few_polls_keeps_its_entities(
     assert _battery_state(hass, "222") == "80"
 
     api.dids = ["111"]
-    await _poll(hass, config_entry, STALE_DEVICE_POLLS - 1)
+    await _poll(hass, config_entry, POLLS_BEFORE_REMOVAL - 1, freezer)
 
     assert _device(hass, "222") is not None
     assert _unique_ids(hass, config_entry, "222") == before
     assert _battery_state(hass, "222") == STATE_UNAVAILABLE
 
     api.dids = ["111", "222"]
-    await _poll(hass, config_entry)
+    await _poll(hass, config_entry, freezer=freezer)
 
     assert _battery_state(hass, "222") == "80"
 
 
+async def test_extra_refreshes_do_not_shorten_the_delay(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory, api: FakeApi, config_entry: MockConfigEntry
+) -> None:
+    """Refreshes after commands (refresh location...) come seconds apart."""
+    await _setup(hass, config_entry)
+
+    api.dids = ["111"]
+    await _poll(hass, config_entry, 10)
+
+    assert _device(hass, "222") is not None
+
+
 async def test_watch_gone_is_removed_then_recreated_when_back(
-    hass: HomeAssistant, api: FakeApi, config_entry: MockConfigEntry
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory, api: FakeApi, config_entry: MockConfigEntry
 ) -> None:
     await _setup(hass, config_entry)
     before = _unique_ids(hass, config_entry, "222")
 
     api.dids = ["111"]
-    await _poll(hass, config_entry, STALE_DEVICE_POLLS)
+    await _poll(hass, config_entry, POLLS_BEFORE_REMOVAL, freezer)
 
     assert _device(hass, "222") is None
     assert _unique_ids(hass, config_entry, "222") == set()
@@ -82,7 +125,7 @@ async def test_watch_gone_is_removed_then_recreated_when_back(
     assert _device(hass, "111") is not None
 
     api.dids = ["111", "222"]
-    await _poll(hass, config_entry)
+    await _poll(hass, config_entry, freezer=freezer)
 
     assert _device(hass, "222") is not None
     assert _unique_ids(hass, config_entry, "222") == before
@@ -90,25 +133,22 @@ async def test_watch_gone_is_removed_then_recreated_when_back(
 
 
 async def test_failed_polls_do_not_count_as_missing(
-    hass: HomeAssistant, api: FakeApi, config_entry: MockConfigEntry
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory, api: FakeApi, config_entry: MockConfigEntry
 ) -> None:
     await _setup(hass, config_entry)
 
-    api.dids = ["111"]
-    await _poll(hass, config_entry, STALE_DEVICE_POLLS - 1)
+    # The watch is listed again by the only successful poll of the period.
     api.fail = True
-    await _poll(hass, config_entry, STALE_DEVICE_POLLS)
+    await _poll(hass, config_entry, POLLS_BEFORE_REMOVAL, freezer)
+    api.fail = False
+    api.dids = ["111"]
+    await _poll(hass, config_entry, freezer=freezer)
 
     assert _device(hass, "222") is not None
 
-    api.fail = False
-    await _poll(hass, config_entry)
-
-    assert _device(hass, "222") is None
-
 
 async def test_watch_shared_with_another_entry_keeps_its_device(
-    hass: HomeAssistant, api: FakeApi, config_entry: MockConfigEntry
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory, api: FakeApi, config_entry: MockConfigEntry
 ) -> None:
     # A second parent account that sees the same watch (disabled, so it is not set up here).
     other_entry = MockConfigEntry(
@@ -119,7 +159,7 @@ async def test_watch_shared_with_another_entry_keeps_its_device(
     dr.async_get(hass).async_get_or_create(config_entry_id=other_entry.entry_id, identifiers={(DOMAIN, "222")})
 
     api.dids = ["111"]
-    await _poll(hass, config_entry, STALE_DEVICE_POLLS)
+    await _poll(hass, config_entry, POLLS_BEFORE_REMOVAL, freezer)
 
     device = _device(hass, "222")
     assert device is not None
@@ -128,34 +168,61 @@ async def test_watch_shared_with_another_entry_keeps_its_device(
 
 
 async def test_device_removed_by_the_user_comes_back(
-    hass: HomeAssistant, hass_ws_client: WebSocketGenerator, api: FakeApi, config_entry: MockConfigEntry
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    freezer: FrozenDateTimeFactory,
+    api: FakeApi,
+    config_entry: MockConfigEntry,
 ) -> None:
     assert await async_setup_component(hass, "config", {})
     await _setup(hass, config_entry)
     before = _unique_ids(hass, config_entry, "222")
-    client = await hass_ws_client(hass)
-
-    async def _remove(did: str) -> dict:
-        await client.send_json_auto_id(
-            {
-                "type": "config/device_registry/remove_config_entry",
-                "config_entry_id": config_entry.entry_id,
-                "device_id": _device(hass, did).id,
-            }
-        )
-        return await client.receive_json()
 
     # Refused while the account still lists the watch.
-    assert not (await _remove("222"))["success"]
+    assert not await _remove_device(hass, hass_ws_client, config_entry, "222")
 
     api.dids = ["111"]
-    await _poll(hass, config_entry)
-    assert (await _remove("222"))["success"]
-    await hass.async_block_till_done()
+    await _poll(hass, config_entry, POLLS_BEFORE_REMOVAL - 1, freezer)
+    assert await _remove_device(hass, hass_ws_client, config_entry, "222")
     assert _device(hass, "222") is None
 
     api.dids = ["111", "222"]
-    await _poll(hass, config_entry)
+    await _poll(hass, config_entry, freezer=freezer)
 
     assert _unique_ids(hass, config_entry, "222") == before
     assert _battery_state(hass, "222") == "80"
+
+    # The time missing before the removal does not count any more.
+    api.dids = ["111"]
+    await _poll(hass, config_entry, freezer=freezer)
+
+    assert _device(hass, "222") is not None
+
+
+async def test_device_of_an_entry_not_loaded_can_be_removed(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator, api: FakeApi, config_entry: MockConfigEntry
+) -> None:
+    assert await async_setup_component(hass, "config", {})
+    api.fail = True
+    config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert config_entry.state is ConfigEntryState.SETUP_RETRY
+    dr.async_get(hass).async_get_or_create(config_entry_id=config_entry.entry_id, identifiers={(DOMAIN, "222")})
+
+    assert await _remove_device(hass, hass_ws_client, config_entry, "222")
+    assert _device(hass, "222") is None
+
+
+async def test_settings_of_a_watch_missing_from_a_poll_are_kept(
+    hass: HomeAssistant, api: FakeApi, config_entry: MockConfigEntry
+) -> None:
+    await _setup(hass, config_entry)
+    settings_coordinator = config_entry.runtime_data.settings_coordinator
+    assert "222" in settings_coordinator.data
+
+    api.dids = ["111"]
+    await _poll(hass, config_entry)
+    await settings_coordinator.async_refresh()
+
+    assert "222" in settings_coordinator.data

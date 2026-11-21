@@ -35,7 +35,7 @@ from .const import (
     SERVICE_SET_DND_SCHEDULE,
     SERVICE_SET_SOS_NUMBERS,
     SIGNAL_WATCH_REMOVED,
-    STALE_DEVICE_POLLS,
+    STALE_DEVICE_AFTER,
 )
 from .core.protocol import (
     COMMAND_CALL_BACK,
@@ -159,8 +159,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SaveFamilyConfigEntry) -
     settings_coordinator = SaveFamilySettingsCoordinator(hass, client, coordinator)
     await settings_coordinator.async_refresh()
 
-    # Successful polls in a row that did not list each device's watch.
-    missed_polls: dict[str, int] = {}
+    # Since when each device's watch has been missing from every successful poll.
+    missing_since: dict[str, datetime] = {}
 
     @callback
     def _async_cleanup_devices() -> None:
@@ -168,17 +168,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: SaveFamilyConfigEntry) -
             # A failed poll keeps the previous data and says nothing about the account.
             return
         device_reg = dr.async_get(hass)
+        devices = dr.async_entries_for_config_entry(device_reg, entry.entry_id)
+        # A device the user removed starts over if it comes back (Home Assistant restores its id).
+        for device_id in missing_since.keys() - {device.id for device in devices}:
+            del missing_since[device_id]
         known_dids = set(coordinator.data)
-        for device in dr.async_entries_for_config_entry(device_reg, entry.entry_id):
+        now = dt_util.utcnow()
+        for device in devices:
             dids = {ident for domain, ident in device.identifiers if domain == DOMAIN}
             if not dids or not dids.isdisjoint(known_dids):
-                missed_polls.pop(device.id, None)
+                missing_since.pop(device.id, None)
                 continue
-            # The server sometimes leaves a watch out of a single poll.
-            missed_polls[device.id] = missed_polls.get(device.id, 0) + 1
-            if missed_polls[device.id] < STALE_DEVICE_POLLS:
+            # The server sometimes leaves a watch out of a poll or two.
+            if now - missing_since.setdefault(device.id, now) < STALE_DEVICE_AFTER:
                 continue
-            del missed_polls[device.id]
+            del missing_since[device.id]
             # Removes only this entry's link: another entry (second parent account) may share the watch.
             device_reg.async_update_device(device.id, remove_config_entry_id=entry.entry_id)
             _async_forget_watches(hass, entry, dids)
@@ -213,6 +217,9 @@ async def async_remove_config_entry_device(
     config_entry: SaveFamilyConfigEntry,
     device_entry: "DeviceEntry",
 ) -> bool:
+    if config_entry.state is not ConfigEntryState.LOADED:
+        # No poll to check against and no platform to tell (setup failed or entry disabled).
+        return True
     coordinator = config_entry.runtime_data.coordinator
     known = {(DOMAIN, did) for did in coordinator.data}
     if any(ident in known for ident in device_entry.identifiers):
