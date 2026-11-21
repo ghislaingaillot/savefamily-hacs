@@ -5,9 +5,10 @@ from __future__ import annotations
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import ConfigEntryDisabler, ConfigEntryState
 from homeassistant.const import STATE_UNAVAILABLE
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
@@ -15,6 +16,7 @@ from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 from custom_components.savefamily.const import (
     DOMAIN,
     POLL_INTERVAL,
+    SIGNAL_WATCH_HANDED_OVER,
     STALE_DEVICE_AFTER,
 )
 
@@ -237,6 +239,23 @@ async def test_settings_of_a_removed_watch_are_dropped(
 
     api.dids = ["111"]
     await _poll(hass, config_entry, POLLS_BEFORE_REMOVAL, freezer)
+    await settings_coordinator.async_refresh()
+
+    assert set(settings_coordinator.data) == {"111"}
+
+
+async def test_settings_of_a_watch_handed_over_during_a_refresh_are_dropped(
+    hass: HomeAssistant, api: FakeApi, config_entry: MockConfigEntry
+) -> None:
+    await _setup(hass, config_entry)
+    settings_coordinator = config_entry.runtime_data.settings_coordinator
+
+    @callback
+    def _hand_over(did: str) -> None:
+        if did == "222":
+            async_dispatcher_send(hass, SIGNAL_WATCH_HANDED_OVER.format(config_entry.entry_id), "222")
+
+    api.on_settings_read = _hand_over
     await settings_coordinator.async_refresh()
 
     assert set(settings_coordinator.data) == {"111"}

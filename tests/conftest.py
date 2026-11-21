@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection, Generator
+from collections.abc import Callable, Container, Generator
 from typing import Any
 from unittest.mock import patch
 
@@ -38,6 +38,8 @@ class FakeApi:
         self.failing_accounts: set[str] = set()
         # (login name, did) of each position read.
         self.reads: list[tuple[str, str]] = []
+        # Called with the did on each settings read.
+        self.on_settings_read: Callable[[str], None] | None = None
 
     def add_alarm(self, did: str, alarm_type: str) -> None:
         alarms = self.alarms.setdefault(did, [])
@@ -53,7 +55,7 @@ class FakeSaveFamilyClient:
         self._loginname = loginname
 
     async def async_refresh_watch_states(
-        self, previous: dict[str, SaveFamilyWatchState] | None = None, skip: Collection[str] = ()
+        self, previous: dict[str, SaveFamilyWatchState] | None = None, skip: Container[str] = ()
     ) -> dict[str, SaveFamilyWatchState]:
         if self._api.fail or self._loginname in self._api.failing_accounts:
             raise SaveFamilyError("server unreachable")
@@ -73,6 +75,8 @@ class FakeSaveFamilyClient:
         return list(self._api.alarms.get(did, []))
 
     async def _async_not_served(self, did: str) -> Any:
+        if self._api.on_settings_read is not None:
+            self._api.on_settings_read(did)
         raise SaveFamilyError("not served by the fake API")
 
     # Settings failures never block location updates.

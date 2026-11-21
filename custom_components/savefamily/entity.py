@@ -32,7 +32,10 @@ def async_forget_removed_watches(hass: HomeAssistant, entry: ConfigEntry, entiti
     def _async_hand_over(did: str) -> None:
         entities = entities_by_did.pop(did, None)
         for entity in entities if isinstance(entities, list) else [entities]:
-            if entity is not None and entity.hass is not None:
+            if entity is None:
+                continue
+            entity.handed_over = True
+            if entity.hass is not None:
                 hass.async_create_task(entity.async_remove())
 
     entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_WATCH_REMOVED.format(entry.entry_id), _async_forget))
@@ -41,7 +44,18 @@ def async_forget_removed_watches(hass: HomeAssistant, entry: ConfigEntry, entiti
     )
 
 
-class SaveFamilyEntity(CoordinatorEntity[SaveFamilyDataUpdateCoordinator]):
+class _HandOverMixin:
+    """Removes an entity handed over to another entry before it was even added."""
+
+    handed_over = False
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if self.handed_over:
+            self.hass.async_create_task(self.async_remove())
+
+
+class SaveFamilyEntity(_HandOverMixin, CoordinatorEntity[SaveFamilyDataUpdateCoordinator]):
     _attr_has_entity_name = True
 
     def __init__(self, coordinator: SaveFamilyDataUpdateCoordinator, did: str) -> None:
@@ -61,7 +75,7 @@ class SaveFamilyEntity(CoordinatorEntity[SaveFamilyDataUpdateCoordinator]):
         return self.coordinator.data[self._did]
 
 
-class SaveFamilySettingsEntity(CoordinatorEntity[SaveFamilySettingsCoordinator]):
+class SaveFamilySettingsEntity(_HandOverMixin, CoordinatorEntity[SaveFamilySettingsCoordinator]):
     """Entity backed by the slower settings coordinator."""
 
     _attr_has_entity_name = True

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import datetime
 
@@ -9,6 +9,7 @@ from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later
@@ -41,6 +42,20 @@ from .core.protocol import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class _SkippedWatches:
+    """Watches the client lists without reading them: another entry handles them."""
+
+    def __init__(self, may_handle: Callable[[str], bool]) -> None:
+        self._may_handle = may_handle
+        self.skipped: set[str] = set()
+
+    def __contains__(self, did: object) -> bool:
+        if not isinstance(did, str) or self._may_handle(did):
+            return False
+        self.skipped.add(did)
+        return True
 
 
 class _DelayedRefreshMixin:
@@ -78,6 +93,8 @@ class SaveFamilyDataUpdateCoordinator(_DelayedRefreshMixin, DataUpdateCoordinato
         self.client = client
         # When a successful poll last listed each watch this entry handles.
         self.last_shown: dict[str, datetime] = {}
+        # Watches the account listed at the last successful poll, handled here or not.
+        self.listed: set[str] = set()
 
     # A watch listed by several accounts (two parents) is handled by one entry at a time:
     # its entities, alarms and settings belong to that entry only.
@@ -96,9 +113,13 @@ class SaveFamilyDataUpdateCoordinator(_DelayedRefreshMixin, DataUpdateCoordinato
         entry_id = self.config_entry.entry_id
         try:
             # Listed by the account but handled by another entry: not read.
-            others = {did for did, owner in self._owners.items() if owner != entry_id}
-            listed = await self.client.async_refresh_watch_states(self.data, skip=others)
-            states = {did: state for did, state in listed.items() if did not in others and self._async_may_handle(did)}
+            skip = _SkippedWatches(self._async_may_handle)
+            listed = await self.client.async_refresh_watch_states(self.data, skip=skip)
+            states = {
+                did: state
+                for did, state in listed.items()
+                if did not in skip.skipped and self._async_may_handle(did)
+            }
             last_alarm_ids: dict[str, int | None] = {}
             for did, state in states.items():
                 new_alarms, last_alarm_ids[did] = await self._async_new_alarms(did)
@@ -113,8 +134,12 @@ class SaveFamilyDataUpdateCoordinator(_DelayedRefreshMixin, DataUpdateCoordinato
         # Claim the watches and store the alarms seen only now that every read succeeded: after an
         # error, the next poll finds these alarms again.
         now = dt_util.utcnow()
+        self.listed = set(listed)
         for did in list(states):
-            if self._owners.setdefault(did, entry_id) != entry_id:
+            if (owner := self._owners.get(did)) is None:
+                self._owners[did] = entry_id
+                self._async_adopt_entities(did)
+            elif owner != entry_id:
                 # Claimed by another entry while this poll was running.
                 del states[did]
                 continue
@@ -156,6 +181,9 @@ class SaveFamilyDataUpdateCoordinator(_DelayedRefreshMixin, DataUpdateCoordinato
             if owner is None or owner == self.config_entry.entry_id:
                 continue
             entry = self.hass.config_entries.async_get_entry(owner)
+            if entry is not None and entry.state is ConfigEntryState.SETUP_IN_PROGRESS:
+                # It has just claimed the watch and cannot hand it over before it is loaded.
+                continue
             if entry is not None and entry.state is ConfigEntryState.LOADED:
                 shown = entry.runtime_data.coordinator.last_shown.get(did)
                 if shown is not None and now - shown < STALE_DEVICE_AFTER:
@@ -164,6 +192,39 @@ class SaveFamilyDataUpdateCoordinator(_DelayedRefreshMixin, DataUpdateCoordinato
             # claims the watch at its next poll.
             del self._owners[did]
             async_dispatcher_send(self.hass, SIGNAL_WATCH_HANDED_OVER.format(owner), did)
+
+    @callback
+    def _async_adopt_entities(self, did: str) -> None:
+        """Enable the watch's device and entities, disabled with an entry that had the watch."""
+        device_reg = dr.async_get(self.hass)
+        if (device := device_reg.async_get_device(identifiers={(DOMAIN, did)})) is None:
+            return
+        if device.disabled_by is dr.DeviceEntryDisabler.CONFIG_ENTRY:
+            device_reg.async_update_device(device.id, disabled_by=None)
+        entity_reg = er.async_get(self.hass)
+        entry_id = self.config_entry.entry_id
+        for entity in er.async_entries_for_device(entity_reg, device.id, include_disabled_entities=True):
+            if (
+                entity.platform == DOMAIN
+                and entity.config_entry_id != entry_id
+                and entity.disabled_by is er.RegistryEntryDisabler.CONFIG_ENTRY
+            ):
+                entity_reg.async_update_entity(entity.entity_id, config_entry_id=entry_id, disabled_by=None)
+
+    @callback
+    def async_owner(self, did: str) -> str | None:
+        """Id of the entry handling the watch, if any."""
+        return self._owners.get(did)
+
+    @callback
+    def async_listed_by_another_entry(self, did: str) -> bool:
+        """Whether another loaded entry's account lists the watch."""
+        return any(
+            entry.entry_id != self.config_entry.entry_id
+            and entry.state is ConfigEntryState.LOADED
+            and did in entry.runtime_data.coordinator.listed
+            for entry in self.hass.config_entries.async_entries(DOMAIN)
+        )
 
     @callback
     def async_release_watches(self, keep: set[str] | frozenset[str] = frozenset()) -> None:
@@ -253,7 +314,7 @@ class SaveFamilySettingsCoordinator(_DelayedRefreshMixin, DataUpdateCoordinator[
         # Keep the settings of a watch missing from the last poll: it is usually back at the next
         # one. They are dropped once its device is removed or another entry takes it over.
         results = {did: settings for did, settings in previous.items() if did not in watches}
-        for did in watches:
+        for did in list(watches):
             old = previous.get(did) or SaveFamilyWatchSettings()
             results[did] = SaveFamilyWatchSettings(
                 settings=await self._async_fetch(
@@ -266,7 +327,9 @@ class SaveFamilySettingsCoordinator(_DelayedRefreshMixin, DataUpdateCoordinator[
                     did, "v2_findPictrueDoorInfo", self.client.async_find_latest_photo, old.latest_photo
                 ),
             )
-        return results
+        # A watch forgotten while this refresh ran (device removed, taken over) stays forgotten.
+        watches, current = self._main_coordinator.data or {}, self.data or {}
+        return {did: settings for did, settings in results.items() if did in watches or did in current}
 
     @callback
     def async_forget_watch(self, did: str) -> None:
