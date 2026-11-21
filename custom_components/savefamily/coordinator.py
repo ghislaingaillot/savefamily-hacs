@@ -10,6 +10,7 @@ from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
+    DATA_WATCH_OWNERS,
     DOMAIN,
     EVENT_ALARM,
     POLL_INTERVAL,
@@ -20,6 +21,7 @@ from .core.async_client import SaveFamilyApiClient
 from .core.protocol import (
     COMMAND_REQUEST_LOCATION,
     DEVICE_OFFLINE_STATUS,
+    SaveFamilyAlarm,
     SaveFamilyAuthError,
     SaveFamilyError,
     SaveFamilyResponseError,
@@ -70,9 +72,11 @@ class SaveFamilyDataUpdateCoordinator(_DelayedRefreshMixin, DataUpdateCoordinato
 
     async def _async_update_data(self) -> dict[str, SaveFamilyWatchState]:
         try:
-            states = await self.client.async_refresh_watch_states(self.data)
+            states = self._async_keep_own_watches(await self.client.async_refresh_watch_states(self.data))
+            last_alarm_ids: dict[str, int | None] = {}
             for did, state in states.items():
-                states[did] = replace(state, new_alarms=tuple(await self._async_new_alarms(did)))
+                new_alarms, last_alarm_ids[did] = await self._async_new_alarms(did)
+                states[did] = replace(state, new_alarms=tuple(new_alarms))
         except SaveFamilyUpgradeRequiredError as exc:
             raise ConfigEntryError(str(exc)) from exc
         except SaveFamilyAuthError as exc:
@@ -80,6 +84,8 @@ class SaveFamilyDataUpdateCoordinator(_DelayedRefreshMixin, DataUpdateCoordinato
         except SaveFamilyError as exc:
             raise UpdateFailed(str(exc)) from exc
 
+        # Only once every watch was read: after an error, the next poll finds these alarms again.
+        self._last_alarm_id.update({did: last for did, last in last_alarm_ids.items() if last is not None})
         for did, state in states.items():
             for alarm in state.new_alarms:
                 self.hass.bus.async_fire(
@@ -88,22 +94,36 @@ class SaveFamilyDataUpdateCoordinator(_DelayedRefreshMixin, DataUpdateCoordinato
                 )
         return states
 
-    async def _async_new_alarms(self, did: str):
+    @callback
+    def _async_keep_own_watches(self, states: dict[str, SaveFamilyWatchState]) -> dict[str, SaveFamilyWatchState]:
+        """Leave out the watches another entry (a second parent account) already handles."""
+        owners: dict[str, str] = self.hass.data.setdefault(DATA_WATCH_OWNERS, {})
+        entry_id = self.config_entry.entry_id
+        return {did: state for did, state in states.items() if owners.setdefault(did, entry_id) == entry_id}
+
+    @callback
+    def async_release_watches(self, keep: set[str] | frozenset[str] = frozenset()) -> None:
+        """Let other entries take over the watches of this entry, except those in keep."""
+        owners: dict[str, str] = self.hass.data.get(DATA_WATCH_OWNERS, {})
+        entry_id = self.config_entry.entry_id
+        for did in [did for did, owner in owners.items() if owner == entry_id and did not in keep]:
+            del owners[did]
+
+    async def _async_new_alarms(self, did: str) -> tuple[list[SaveFamilyAlarm], int | None]:
+        """New alarms of the watch, and the highest alarm id now seen (None leaves it unchanged)."""
         try:
             alarms = await self.client.async_find_alarms(did)
         except (SaveFamilyAuthError, SaveFamilyUpgradeRequiredError):
             raise
         except SaveFamilyError as exc:
             _LOGGER.debug("v2_findAlarmInfo failed for %s: %s", did, exc)
-            return []
+            return [], None
 
         newest = max((alarm.id for alarm in alarms), default=0)
         if did not in self._last_alarm_id:
-            self._last_alarm_id[did] = newest
-            return []
+            return [], newest
         last_seen = self._last_alarm_id[did]
-        self._last_alarm_id[did] = max(last_seen, newest)
-        return [alarm for alarm in alarms if alarm.id > last_seen]
+        return [alarm for alarm in alarms if alarm.id > last_seen], max(last_seen, newest)
 
     async def async_request_location(self, did: str) -> None:
         if await self.async_send_command(did, COMMAND_REQUEST_LOCATION, with_model=True):
