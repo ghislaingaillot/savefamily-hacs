@@ -153,6 +153,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SaveFamilyConfigEntry) -
         app_id=entry.data.get(CONF_APP_ID, DEFAULT_APP_ID),
     )
     coordinator = SaveFamilyDataUpdateCoordinator(hass, client)
+    # Another entry (second parent account) may then take over the watches of this one.
+    entry.async_on_unload(coordinator.async_release_watches)
     await coordinator.async_config_entry_first_refresh()
 
     # Settings failures must not block location setup.
@@ -173,6 +175,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SaveFamilyConfigEntry) -
         for device_id in missing_since.keys() - {device.id for device in devices}:
             del missing_since[device_id]
         known_dids = set(coordinator.data)
+        # Watches this entry still shows: listed by the last poll, or with a device kept for now.
+        shown_dids = set(known_dids)
         now = dt_util.utcnow()
         for device in devices:
             dids = {ident for domain, ident in device.identifiers if domain == DOMAIN}
@@ -181,11 +185,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: SaveFamilyConfigEntry) -
                 continue
             # The server sometimes leaves a watch out of a poll or two.
             if now - missing_since.setdefault(device.id, now) < STALE_DEVICE_AFTER:
+                shown_dids |= dids
                 continue
             del missing_since[device.id]
             # Removes only this entry's link: another entry (second parent account) may share the watch.
             device_reg.async_update_device(device.id, remove_config_entry_id=entry.entry_id)
             _async_forget_watches(hass, entry, dids)
+        coordinator.async_release_watches(shown_dids)
 
     _async_cleanup_devices()
     entry.async_on_unload(coordinator.async_add_listener(_async_cleanup_devices))

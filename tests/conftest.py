@@ -26,11 +26,14 @@ pytest_plugins = "pytest_homeassistant_custom_component"
 
 
 class FakeApi:
-    """What the fake server answers: the watches of the account, or an error."""
+    """What the fake server answers: the watches of each account, their alarms, or errors."""
 
     def __init__(self) -> None:
+        # Watches of every account, unless listed in accounts by login name.
         self.dids: list[str] = ["111", "222"]
+        self.accounts: dict[str, list[str]] = {}
         self.alarms: dict[str, list[SaveFamilyAlarm]] = {}
+        self.alarm_errors: dict[str, SaveFamilyError] = {}
         self.fail = False
 
     def add_alarm(self, did: str, alarm_type: str) -> None:
@@ -41,9 +44,10 @@ class FakeApi:
 class FakeSaveFamilyClient:
     """Replaces SaveFamilyApiClient with the few calls a poll makes."""
 
-    def __init__(self, api: FakeApi, region: str) -> None:
+    def __init__(self, api: FakeApi, region: str, loginname: str) -> None:
         self._api = api
         self.region = region
+        self._loginname = loginname
 
     async def async_refresh_watch_states(
         self, previous: dict[str, SaveFamilyWatchState] | None = None
@@ -57,10 +61,12 @@ class FakeSaveFamilyClient:
                 longitude=2.35,
                 battery=80,
             )
-            for did in self._api.dids
+            for did in self._api.accounts.get(self._loginname, self._api.dids)
         }
 
     async def async_find_alarms(self, did: str) -> list[SaveFamilyAlarm]:
+        if did in self._api.alarm_errors:
+            raise self._api.alarm_errors[did]
         return list(self._api.alarms.get(did, []))
 
     async def _async_not_served(self, did: str) -> Any:
@@ -81,18 +87,22 @@ def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
 def api() -> Generator[FakeApi]:
     fake = FakeApi()
 
-    def _client(session: Any, *, region: str, **kwargs: Any) -> FakeSaveFamilyClient:
-        return FakeSaveFamilyClient(fake, region)
+    def _client(session: Any, *, region: str, loginname: str, **kwargs: Any) -> FakeSaveFamilyClient:
+        return FakeSaveFamilyClient(fake, region, loginname)
 
     with patch("custom_components.savefamily.core.async_client.SaveFamilyApiClient", _client):
         yield fake
 
 
-@pytest.fixture
-def config_entry() -> MockConfigEntry:
+def make_entry(loginname: str) -> MockConfigEntry:
     return MockConfigEntry(
         domain=DOMAIN,
-        title="parent@example.com",
-        unique_id="europe:parent@example.com",
-        data={CONF_REGION: "europe", CONF_LOGINNAME: "parent@example.com", CONF_PASSWORD: "secret"},
+        title=loginname,
+        unique_id=f"europe:{loginname}",
+        data={CONF_REGION: "europe", CONF_LOGINNAME: loginname, CONF_PASSWORD: "secret"},
     )
+
+
+@pytest.fixture
+def config_entry() -> MockConfigEntry:
+    return make_entry("parent@example.com")
