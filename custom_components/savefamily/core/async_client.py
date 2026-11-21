@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import ssl
-from collections.abc import Awaitable, Callable, Collection, Sequence
+from collections.abc import Awaitable, Callable, Container, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
@@ -103,7 +103,7 @@ class SaveFamilyApiClient:
     async def async_refresh_watch_states(
         self,
         previous: dict[str, SaveFamilyWatchState] | None = None,
-        skip: Collection[str] = (),
+        skip: Container[str] = (),
     ) -> dict[str, SaveFamilyWatchState]:
         """State of every watch of the account; those in skip are listed but not read."""
         login_payload = await self.async_login()

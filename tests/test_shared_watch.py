@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 from freezegun.api import FrozenDateTimeFactory
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import ConfigEntryDisabler, ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_capture_events,
+    async_fire_time_changed,
 )
 
 from custom_components.savefamily.const import DOMAIN, EVENT_ALARM, POLL_INTERVAL
@@ -85,17 +89,25 @@ async def test_shared_watch_moves_when_the_first_account_drops_it(
     hass: HomeAssistant, freezer: FrozenDateTimeFactory, api: FakeApi
 ) -> None:
     mum, dad = await _setup_two_accounts(hass, api)
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id("sensor", DOMAIN, "222_battery")
+    registry.async_update_entity(entity_id, name="Leo battery")
+    device_id = _device(hass, "222").id
 
     api.accounts["mum@example.com"] = ["111"]
-    for _ in range(POLLS_BEFORE_REMOVAL):
+    for _ in range(POLLS_BEFORE_REMOVAL + 2):
         freezer.tick(POLL_INTERVAL)
         await _poll(hass, mum)
         await _poll(hass, dad)
 
     assert set(dad.runtime_data.coordinator.data) == {"222", "333"}
+    # The same entity and device, with the user's settings, now on dad's entry only.
     assert _entry_of(hass, "222_battery") == dad.entry_id
+    assert registry.async_get(entity_id).name == "Leo battery"
     assert _battery_state(hass, "222") == "80"
-    assert _device(hass, "222").config_entries == {dad.entry_id}
+    device = _device(hass, "222")
+    assert device.id == device_id
+    assert device.config_entries == {dad.entry_id}
 
 
 async def test_shared_watch_moves_when_its_entry_keeps_failing(
@@ -158,11 +170,14 @@ async def test_shared_watch_stays_with_its_entry_after_a_restart(hass: HomeAssis
     assert await hass.config_entries.async_unload(mum.entry_id)
     await hass.async_block_till_done()
 
-    # Dad's entry polls first while mum's is still starting: it leaves the watch to mum's.
+    # Dad's entry polls first while mum's is still starting: it leaves the watch to mum's,
+    # without reading it.
     mum.mock_state(hass, ConfigEntryState.SETUP_IN_PROGRESS)
+    api.reads.clear()
     assert await hass.config_entries.async_setup(dad.entry_id)
     await hass.async_block_till_done()
     assert set(dad.runtime_data.coordinator.data) == {"333"}
+    assert api.reads == [("dad@example.com", "333")]
 
     mum.mock_state(hass, ConfigEntryState.NOT_LOADED)
     assert await hass.config_entries.async_setup(mum.entry_id)
@@ -170,3 +185,39 @@ async def test_shared_watch_stays_with_its_entry_after_a_restart(hass: HomeAssis
 
     assert set(mum.runtime_data.coordinator.data) == {"111", "222"}
     assert _entry_of(hass, "222_battery") == mum.entry_id
+
+
+async def test_shared_watch_is_not_taken_from_an_entry_starting(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory, api: FakeApi
+) -> None:
+    mum, dad = await _setup_two_accounts(hass, api)
+
+    # Mum's entry has claimed the watch and is still starting: it cannot hand it over yet.
+    mum.mock_state(hass, ConfigEntryState.SETUP_IN_PROGRESS)
+    freezer.tick(POLL_INTERVAL * (POLLS_BEFORE_REMOVAL + 1))
+    await _poll(hass, dad)
+    mum.mock_state(hass, ConfigEntryState.LOADED)
+
+    assert set(mum.runtime_data.coordinator.data) == {"111", "222"}
+    assert set(dad.runtime_data.coordinator.data) == {"333"}
+
+
+async def test_shared_watch_moves_when_its_entry_is_disabled(hass: HomeAssistant, api: FakeApi) -> None:
+    mum, dad = await _setup_two_accounts(hass, api)
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id("sensor", DOMAIN, "222_battery")
+
+    assert await hass.config_entries.async_set_disabled_by(mum.entry_id, ConfigEntryDisabler.USER)
+    await hass.async_block_till_done()
+    await _poll(hass, dad)
+
+    assert registry.async_get(entity_id).disabled_by is None
+    assert _entry_of(hass, "222_battery") == dad.entry_id
+    assert _battery_state(hass, "222") == "80"
+    assert not _device(hass, "222").disabled
+
+    # Enabling entities reloads dad's entry a bit later: it keeps the watch.
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=60))
+    await hass.async_block_till_done()
+    assert dad.state is ConfigEntryState.LOADED
+    assert _battery_state(hass, "222") == "80"

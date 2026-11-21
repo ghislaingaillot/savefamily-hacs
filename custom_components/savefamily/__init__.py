@@ -200,8 +200,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: SaveFamilyConfigEntry) -
             if not dids or not dids.isdisjoint(known_dids):
                 missing_since.pop(device.id, None)
                 continue
-            # The server sometimes leaves a watch out of a poll or two.
-            if now - missing_since.setdefault(device.id, now) < STALE_DEVICE_AFTER:
+            # The server sometimes leaves a watch out of a poll or two. And when another account lists
+            # the watch, keep the device until that entry has taken over its entities.
+            if now - missing_since.setdefault(device.id, now) < STALE_DEVICE_AFTER or any(
+                coordinator.async_owner(did) in (None, entry.entry_id)
+                and coordinator.async_listed_by_another_entry(did)
+                for did in dids
+            ):
                 shown_dids |= dids
                 continue
             del missing_since[device.id]
