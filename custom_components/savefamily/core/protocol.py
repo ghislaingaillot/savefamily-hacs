@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Sequence
+from collections.abc import Container, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 
 DEFAULT_REGION = "europe"
@@ -240,6 +240,22 @@ class SaveFamilyAlarm:
             "message": self.message,
             "created": self.created.isoformat() if self.created else None,
         }
+
+
+class SaveFamilyClient(Protocol):
+    """What the location coordinator needs from a backend client (Classic or Connect)."""
+
+    async def async_refresh_watch_states(
+        self,
+        previous: dict[str, SaveFamilyWatchState] | None = None,
+        skip: Container[str] = (),
+    ) -> dict[str, SaveFamilyWatchState]: ...
+
+    async def async_find_alarms(self, did: str) -> list[SaveFamilyAlarm]: ...
+
+    async def async_send_command(
+        self, did: str, command: str, *params: str, with_model: bool = False
+    ) -> Any: ...
 
 
 @dataclass(frozen=True, slots=True)

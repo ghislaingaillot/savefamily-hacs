@@ -3,6 +3,30 @@
   "config": {
     "step": {
       "user": {
+        "title": "SaveFamily",
+        "description": "Quelle application SaveFamily la montre utilise-t-elle ?",
+        "menu_options": {
+          "connect": "SaveFamily Connect (nouvelle application)",
+          "classic": "SaveFamily Classic"
+        }
+      },
+      "connect": {
+        "title": "SaveFamily Connect",
+        "description": "Entrez l'email et le mot de passe de votre compte SaveFamily Connect. SaveFamily vous enverra un code de connexion par email ; le mot de passe n'est pas conservé.",
+        "data": {
+          "loginname": "Email",
+          "password": "Mot de passe"
+        }
+      },
+      "connect_code": {
+        "title": "Code de connexion SaveFamily Connect",
+        "description": "Entrez le code envoyé par SaveFamily ({method}) pour {email}.",
+        "data": {
+          "code": "Code",
+          "resend": "M'envoyer un nouveau code"
+        }
+      },
+      "classic": {
         "title": "Connecter SaveFamily",
         "description": "Entrez les informations de votre compte SaveFamily.",
         "data": {
@@ -17,7 +41,7 @@
       },
       "reauth_confirm": {
         "title": "Reconnexion SaveFamily",
-        "description": "Mettez à jour le mot de passe de ce compte SaveFamily.",
+        "description": "Mettez à jour le mot de passe de ce compte SaveFamily. Pour SaveFamily Connect, un nouveau code de connexion sera envoyé par email après cette étape.",
         "data": {
           "password": "Mot de passe"
         }
@@ -26,7 +50,9 @@
     "error": {
       "invalid_auth": "Authentification invalide. Vérifiez que la région correspond à la zone choisie sur l'écran de connexion de l'application SaveFamily, et que le compte (email ou téléphone) et le mot de passe sont exactement ceux utilisés dans l'application.",
       "cannot_connect": "Impossible de se connecter au serveur",
-      "upgrade_required": "Le serveur SaveFamily refuse ce client (« veuillez mettre à jour l'application »). Le protocole du serveur a probablement encore changé : vérifiez si une mise à jour de l'intégration est disponible. Voir docs/SERVER_LOCKOUT.md."
+      "upgrade_required": "Le serveur SaveFamily refuse ce client (« veuillez mettre à jour l'application »). Le protocole du serveur a probablement encore changé : vérifiez si une mise à jour de l'intégration est disponible. Voir docs/SERVER_LOCKOUT.md.",
+      "invalid_code": "Le code de connexion est incorrect ou a expiré. Cochez « M'envoyer un nouveau code » pour en recevoir un autre.",
+      "connect_invalid_auth": "Email ou mot de passe SaveFamily Connect invalide."
     },
     "abort": {
       "already_configured": "Ce compte SaveFamily est déjà configuré.",

@@ -10,6 +10,15 @@ CONF_LOGINNAME = "loginname"
 CONF_PASSWORD = "password"
 CONF_REGION = "region"
 CONF_APP_ID = "app_id"
+CONF_BACKEND = "backend"
+CONF_CODE = "code"
+CONF_RESEND = "resend"
+CONF_REFRESH_TOKEN = "refresh_token"
+
+# Classic is the tgelec/myaqsh platform; Connect is the newer SaveFamily Connect app.
+# Entries created before Connect support have no backend key and are Classic.
+BACKEND_CLASSIC = "classic"
+BACKEND_CONNECT = "connect"
 
 SERVICE_SET_DND_SCHEDULE = "set_dnd_schedule"
 SERVICE_SET_SOS_NUMBERS = "set_sos_numbers"

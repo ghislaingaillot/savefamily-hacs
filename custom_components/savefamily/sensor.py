@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import SaveFamilyConfigEntry
+from .const import BACKEND_CLASSIC, CONF_BACKEND
 from .core.protocol import supports_dnd_schedule
 from .entity import SaveFamilyEntity, SaveFamilySettingsEntity, async_forget_removed_watches
 
@@ -19,6 +20,8 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data.coordinator
     settings_coordinator = entry.runtime_data.settings_coordinator
+    # Connect does not report GSM signal (yet).
+    has_signal = entry.data.get(CONF_BACKEND, BACKEND_CLASSIC) == BACKEND_CLASSIC
     entities_by_did: dict[str, list[SensorEntity]] = {}
     async_forget_removed_watches(hass, entry, entities_by_did)
 
@@ -32,12 +35,17 @@ async def async_setup_entry(
                     SaveFamilyBatterySensor(coordinator, did),
                     SaveFamilyLastFixSensor(coordinator, did),
                     SaveFamilyStepsSensor(coordinator, did),
-                    SaveFamilySignalSensor(coordinator, did),
-                    SaveFamilySosNumbersSensor(settings_coordinator, watch, "sos_numbers"),
-                    SaveFamilySafeZonesSensor(settings_coordinator, watch, "safe_zones"),
                 ]
-                if supports_dnd_schedule(watch.config):
-                    es.append(SaveFamilyDndScheduleSensor(settings_coordinator, watch, "dnd_schedule"))
+                if has_signal:
+                    es.append(SaveFamilySignalSensor(coordinator, did))
+                # Settings exist only on Classic, which has a settings coordinator.
+                if settings_coordinator is not None:
+                    es += [
+                        SaveFamilySosNumbersSensor(settings_coordinator, watch, "sos_numbers"),
+                        SaveFamilySafeZonesSensor(settings_coordinator, watch, "safe_zones"),
+                    ]
+                    if supports_dnd_schedule(watch.config):
+                        es.append(SaveFamilyDndScheduleSensor(settings_coordinator, watch, "dnd_schedule"))
                 entities_by_did[did] = es
                 new_entities.extend(es)
         if new_entities:
