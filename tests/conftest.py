@@ -38,6 +38,8 @@ class FakeApi:
         self.failing_accounts: set[str] = set()
         # (login name, did) of each position read.
         self.reads: list[tuple[str, str]] = []
+        # (login name, did, command) of each command sent.
+        self.commands: list[tuple[str, str, str]] = []
         # Called with the did on each settings read.
         self.on_settings_read: Callable[[str], None] | None = None
 
@@ -73,6 +75,9 @@ class FakeSaveFamilyClient:
         if did in self._api.alarm_errors:
             raise self._api.alarm_errors[did]
         return list(self._api.alarms.get(did, []))
+
+    async def async_send_command(self, did: str, command: str, *params: str, with_model: bool = False) -> None:
+        self._api.commands.append((self._loginname, did, command))
 
     async def _async_not_served(self, did: str) -> Any:
         if self._api.on_settings_read is not None:

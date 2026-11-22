@@ -18,6 +18,8 @@ Find this integration useful? You can support its development:
 <a href="https://buymeacoffee.com/ghis" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="41" width="174"></a>
 
 > **Technical note:** SaveFamily runs on the shared 3G Electronics backend (`myaqsh.com`), the same platform used by YQT Smart, SeTracker and CarePro+. This integration is inspired by the open-source project [yqt-smart-api](https://github.com/Niek/yqt-smart-api). How each feature was derived from the app, and how far it has been verified, is documented in [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md).
+>
+> Watches managed by the newer **SaveFamily Connect** app use a separate SaveFamily platform. They are supported too, with location, battery and steps only for now: see [SaveFamily Connect](#savefamily-connect) and [docs/CONNECT.md](docs/CONNECT.md).
 
 ---
 
@@ -55,7 +57,11 @@ Click the button above, then **Download** in HACS, then restart Home Assistant.
 
 1. Go to **Settings** → **Devices & Services** → **Add Integration**
 2. Search for **SaveFamily**
-3. Fill in the form:
+3. Choose the app the watch is managed with: **SaveFamily Classic** (`com.tgelec.savefamily`) or **SaveFamily Connect** (`com.savefamily.app`). Check the app on your phone: a watch only works with one of them.
+
+### SaveFamily Classic
+
+Fill in the form:
 
 | Field | Description |
 |-------|-------------|
@@ -65,6 +71,15 @@ Click the button above, then **Download** in HACS, then restart Home Assistant.
 | **App ID** *(advanced)* | Application identifier — leave the default value |
 
 > **Connection issue?** If you get an "Invalid authentication" error, see the [Troubleshooting](#troubleshooting) section.
+
+### SaveFamily Connect
+
+1. Enter the **email** and **password** of your SaveFamily Connect account.
+2. SaveFamily emails you a login code, as when you log in to the app on a new device. Enter it in the next step. If it does not arrive or has expired, tick "Send me a new code" and submit.
+
+The password is not stored: Home Assistant keeps a session token that SaveFamily renews on every refresh. If Home Assistant stays off for more than 30 days, it asks you to log in again (password, then a new code).
+
+Connect watches get the device tracker, battery, last fix, steps, online and location stale entities. Alarms, settings, buttons, the photo wall and the actions below are Classic only for now. Details in [docs/CONNECT.md](docs/CONNECT.md).
 
 You can add several accounts, for example one per parent. A watch listed by several of them gets a single set of entities, handled by one account at a time. Another account takes the watch over, with the same entities, when that account's entry is unloaded, or has failed or no longer listed the watch for 15 minutes.
 
@@ -215,7 +230,7 @@ The card shows the battery level, the time since the last GPS update, and the cu
 
 ## Data refresh
 
-The integration polls the API every **5 minutes** (position, battery, signal, alarms). Settings (work mode, SOS numbers, Do Not Disturb, safe zones, latest photo) are read every **30 minutes** and right after a change. The refresh button sends an asynchronous command to the watch, then triggers a new poll 20 seconds later.
+The integration polls the API every **5 minutes** (position, battery, signal, alarms). Settings (work mode, SOS numbers, Do Not Disturb, safe zones, latest photo) are read every **30 minutes** and right after a change. The refresh button sends an asynchronous command to the watch, then triggers a new poll 20 seconds later. Connect watches are polled every **5 minutes** too (position and battery).
 
 ---
 
@@ -228,7 +243,7 @@ The server rejected the login (`Either account is not registered, Area selected 
 1. **Region** — an account only exists on one regional server. Log out of the SaveFamily app: the login screen shows the selected area. Choose the same region in Home Assistant.
 2. **Login** — use exactly the identifier you use in the app: if the account was created with a phone number, enter the phone number (same format), not the email.
 3. **Password** — log out and back into the app with the same password to make sure it is still valid.
-4. **App** — this integration only supports watches managed through the **SaveFamily** app on the `myaqsh.com` backend (Android package `com.tgelec.savefamily`). Watches managed by another app use a different backend and are not supported.
+4. **App** — the Classic option only supports watches managed through the **SaveFamily Classic** app on the `myaqsh.com` backend (Android package `com.tgelec.savefamily`). If the Classic app says the watch works with the newer app, or you use **SaveFamily Connect**, remove the entry and add it again choosing [SaveFamily Connect](#savefamily-connect).
 
 The **App ID** field is not involved: the server returns the same response whatever its value, so keep the default (`aaagg11145`).
 
@@ -291,6 +306,8 @@ Cette intégration vous est utile ? Vous pouvez soutenir son développement :
 <a href="https://buymeacoffee.com/ghis" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="41" width="174"></a>
 
 > **Note technique** : SaveFamily utilise la plateforme backend partagée de 3G Electronics (`myaqsh.com`), identique à YQT Smart, SeTracker et CarePro+. Cette intégration est adaptée du projet open-source [yqt-smart-api](https://github.com/Niek/yqt-smart-api). L'origine de chaque fonction dans l'application, et son niveau de vérification, sont décrits dans [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md#analyse-de-lapplication-savefamily-v060).
+>
+> Les montres gérées par la nouvelle application **SaveFamily Connect** utilisent une plateforme SaveFamily distincte. Elles sont aussi prises en charge, pour l'instant avec la position, la batterie et les pas uniquement : voir [SaveFamily Connect](#savefamily-connect-1) et [docs/CONNECT.md](docs/CONNECT.md#backend-savefamily-connect).
 
 ---
 
@@ -328,7 +345,11 @@ Cliquez sur le bouton ci-dessus, puis sur **Télécharger** dans HACS, puis red�
 
 1. Aller dans **Paramètres** → **Appareils et services** → **Ajouter une intégration**
 2. Rechercher **SaveFamily**
-3. Remplir le formulaire :
+3. Choisir l'application qui gère la montre : **SaveFamily Classic** (`com.tgelec.savefamily`) ou **SaveFamily Connect** (`com.savefamily.app`). Vérifiez l'application sur votre téléphone : une montre ne fonctionne qu'avec l'une des deux.
+
+### SaveFamily Classic
+
+Remplir le formulaire :
 
 | Champ | Description |
 |-------|-------------|
@@ -338,6 +359,15 @@ Cliquez sur le bouton ci-dessus, puis sur **Télécharger** dans HACS, puis red�
 | **App ID** *(avancé)* | Identifiant d'application — laisser la valeur par défaut |
 
 > **Problème de connexion ?** Si vous obtenez une erreur "Authentification invalide", voir la section [Dépannage](#dépannage).
+
+### SaveFamily Connect
+
+1. Saisir l'**email** et le **mot de passe** du compte SaveFamily Connect.
+2. SaveFamily vous envoie un code de connexion par email, comme lorsque vous vous connectez à l'application sur un nouvel appareil. Saisissez-le à l'étape suivante. S'il n'arrive pas ou a expiré, cochez « M'envoyer un nouveau code » et validez.
+
+Le mot de passe n'est pas conservé : Home Assistant garde un jeton de session que SaveFamily renouvelle à chaque rafraîchissement. Si Home Assistant reste éteint plus de 30 jours, il vous demande de vous reconnecter (mot de passe, puis un nouveau code).
+
+Les montres Connect disposent du suivi de position, de la batterie, de la dernière position, des pas, de l'état en ligne et de la position périmée. Les alarmes, réglages, boutons, le mur de photos et les actions ci-dessous sont pour l'instant réservés à Classic. Détails dans [docs/CONNECT.md](docs/CONNECT.md#backend-savefamily-connect).
 
 Vous pouvez ajouter plusieurs comptes, par exemple un par parent. Une montre listée par plusieurs d'entre eux n'a qu'un seul jeu d'entités, géré par un compte à la fois. Un autre compte reprend la montre, avec les mêmes entités, quand l'entrée de ce compte est déchargée, ou est en échec ou ne liste plus la montre depuis 15 minutes.
 
@@ -488,7 +518,7 @@ La carte affiche le niveau de batterie, le temps écoulé depuis la dernière po
 
 ## Mise à jour des données
 
-L'intégration interroge l'API toutes les **5 minutes** (position, batterie, signal, alarmes). Les réglages (mode de fonctionnement, numéros SOS, Ne pas déranger, zones de sécurité, dernière photo) sont relus toutes les **30 minutes** et juste après une modification. Le bouton "Rafraîchir la position" envoie une commande asynchrone à la montre, puis relance une interrogation 20 secondes plus tard.
+L'intégration interroge l'API toutes les **5 minutes** (position, batterie, signal, alarmes). Les réglages (mode de fonctionnement, numéros SOS, Ne pas déranger, zones de sécurité, dernière photo) sont relus toutes les **30 minutes** et juste après une modification. Le bouton "Rafraîchir la position" envoie une commande asynchrone à la montre, puis relance une interrogation 20 secondes plus tard. Les montres Connect sont aussi interrogées toutes les **5 minutes** (position et batterie).
 
 ---
 
@@ -501,7 +531,7 @@ Le serveur a refusé la connexion (`Either account is not registered, Area selec
 1. **Région** — un compte n'existe que sur un seul serveur régional. Se déconnecter de l'application SaveFamily : l'écran de connexion affiche la zone sélectionnée. Choisir la même région dans Home Assistant.
 2. **Compte** — saisir exactement l'identifiant utilisé dans l'application : si le compte a été créé avec un numéro de téléphone, saisir le numéro (même format), pas l'email.
 3. **Mot de passe** — se déconnecter puis se reconnecter dans l'application avec le même mot de passe pour vérifier qu'il est toujours valide.
-4. **Application** — cette intégration ne prend en charge que les montres gérées par l'application **SaveFamily** sur le backend `myaqsh.com` (package Android `com.tgelec.savefamily`). Les montres gérées par une autre application utilisent un autre backend et ne sont pas prises en charge.
+4. **Application** — l'option Classic ne prend en charge que les montres gérées par l'application **SaveFamily Classic** sur le backend `myaqsh.com` (package Android `com.tgelec.savefamily`). Si l'application Classic indique que la montre fonctionne avec la nouvelle application, ou si vous utilisez **SaveFamily Connect**, supprimez l'entrée et ajoutez-la à nouveau en choisissant [SaveFamily Connect](#savefamily-connect-1).
 
 Le champ **App ID** n'est pas en cause : le serveur renvoie la même réponse quelle que soit sa valeur, garder la valeur par défaut (`aaagg11145`).
 

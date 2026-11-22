@@ -4,6 +4,7 @@ import logging
 from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntryState
@@ -27,7 +28,6 @@ from .const import (
     SIGNAL_WATCH_HANDED_OVER,
     STALE_DEVICE_AFTER,
 )
-from .core.async_client import SaveFamilyApiClient
 from .core.protocol import (
     COMMAND_REQUEST_LOCATION,
     DEVICE_OFFLINE_STATUS,
@@ -40,6 +40,10 @@ from .core.protocol import (
     SaveFamilyWatchState,
     extract_settings,
 )
+
+if TYPE_CHECKING:
+    from .core.async_client import SaveFamilyApiClient
+    from .core.protocol import SaveFamilyClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -83,7 +87,7 @@ class _DelayedRefreshMixin:
 
 
 class SaveFamilyDataUpdateCoordinator(_DelayedRefreshMixin, DataUpdateCoordinator[dict[str, SaveFamilyWatchState]]):
-    def __init__(self, hass: HomeAssistant, client: SaveFamilyApiClient) -> None:
+    def __init__(self, hass: HomeAssistant, client: SaveFamilyClient) -> None:
         super().__init__(
             hass,
             _LOGGER,
